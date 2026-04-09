@@ -18,7 +18,7 @@ export function Chat() {
     {
       id: "1",
       role: "assistant",
-      content: `Hệ thống DevMentor AI đã sẵn sàng. Chào **Quỳnh**! 👋 \n\nNeural Link đã được thiết lập. Bạn cần CMD gì?`,
+      content: `Hệ thống DevMentor AI đã sẵn sàng.`,
       timestamp: new Date(),
     },
   ]);

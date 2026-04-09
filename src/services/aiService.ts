@@ -1,49 +1,46 @@
-import OpenAI from "openai";
+import Groq from "groq-sdk";
 
-// Lấy Key từ file .env (Phải bắt đầu bằng VITE_)
-const API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-
-const openai = new OpenAI({
-  apiKey: API_KEY,
-  dangerouslyAllowBrowser: true // Bắt buộc để chạy trực tiếp trên trình duyệt React
+// Khởi tạo Groq
+const groq = new Groq({
+  apiKey: import.meta.env.VITE_GROQ_API_KEY,
+  dangerouslyAllowBrowser: true 
 });
 
 /**
- * 1. XỬ LÝ CHATBOX (GPT-3.5-TURBO)
- * Có nhớ lịch sử hội thoại và cá nhân hóa tên người dùng
+ * 1. XỬ LÝ CHATBOX
+ * Đã chuyển sang model Llama 3 và cập nhật biến gọi chuẩn
  */
 export const getAIResponse = async (userPrompt: string, history: any[]) => {
   try {
-    const messages: any[] = [
+    const messages = [
       { 
         role: "system", 
         content: `Bạn là DevMentor AI - Trợ lý học lập trình thân thiện. 
-        - Luôn gọi người dùng là  hoặc 'Bạn học thân mến'.
+        - Luôn gọi người dùng là 'Bạn học thân mến'.
         - Trả lời bằng Markdown, bôi đậm các từ khóa quan trọng.
         - Nếu có code, hãy để trong block code tương ứng (ví dụ: \`\`\`javascript).
         - Giọng văn chuyên nghiệp nhưng gần gũi.`
       },
-      // Map lịch sử chat từ giao diện sang format OpenAI
       ...history.map(m => ({
-        role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        role: (m.role === 'user' ? 'user' : 'assistant'),
         content: m.content
       })),
       { role: "user", content: userPrompt }
     ];
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+    // Đổi từ openai sang groq
+    const response = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile", // Model mạnh nhất hiện tại của Groq
       messages: messages as any,
       temperature: 0.8,
-      max_tokens: 1000,
+      max_tokens: 1024,
     });
 
-    return response.choices[0].message.content || "AI không đưa ra phản hồi, Bạn thử lại nhé!";
+    return response.choices[0]?.message?.content || "AI không đưa ra phản hồi, Bạn thử lại nhé!";
   } catch (error: any) {
-    console.error("Lỗi OpenAI Chat:", error);
-    // Bắt lỗi hết tiền/hết hạn dùng
+    console.error("Lỗi Groq Chat:", error);
     if (error.status === 429) {
-      return "Bạn ơi, tài khoản OpenAI hết lượt dùng (Quota) rồi, nạp thêm Credit hoặc check lại Key nhé!";
+      return "Hết lượt dùng (Rate Limit) trên Groq rồi, đợi một chút nhé!";
     }
     return `Lỗi hệ thống: ${error.message}`;
   }
@@ -51,7 +48,6 @@ export const getAIResponse = async (userPrompt: string, history: any[]) => {
 
 /**
  * 2. XỬ LÝ TẠO LỘ TRÌNH (JSON MODE)
- * Dùng GPT để phân tích danh sách bài học và chia chặng (Milestones)
  */
 export const generateAIRoadmap = async (courseTitle: string, userContext: any, lessons: any[]) => {
   try {
@@ -64,7 +60,7 @@ export const generateAIRoadmap = async (courseTitle: string, userContext: any, l
     const prompt = `
       Nhiệm vụ: Bạn là chuyên gia sư phạm. Hãy chia danh sách bài học sau thành 3-5 chặng (milestones).
       Khóa học: ${courseTitle}
-      Học viên: ${userContext?.name || 'Bạn học'}, Trình độ: ${userContext?.current_level || 'Beginner'}
+      Học viên: , Trình độ: ${userContext?.current_level || 'Beginner'}
       Danh sách bài học: ${JSON.stringify(simplifiedLessons)}
 
       YÊU CẦU TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
@@ -82,18 +78,19 @@ export const generateAIRoadmap = async (courseTitle: string, userContext: any, l
       }
     `;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+    const response = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: prompt }],
-      // GPT-3.5 không hỗ trợ json_object mạnh như GPT-4 nên ta nhắc nó ở prompt
+      // Groq hỗ trợ JSON Mode rất tốt
+      response_format: { type: "json_object" },
       temperature: 0.3, 
     });
 
-    const content = response.choices[0].message.content || "{}";
+    const content = response.choices[0]?.message?.content || "{}";
     return JSON.parse(content);
 
   } catch (error) {
-    console.error("Lỗi tạo Roadmap OpenAI:", error);
+    console.error("Lỗi tạo Roadmap Groq:", error);
     return {
       ai_summary: "AI đang bận, Bạn dùng lộ trình mặc định nhé!",
       milestones: []
