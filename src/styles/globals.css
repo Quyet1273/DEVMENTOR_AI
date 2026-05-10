@@ -80,10 +80,12 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* Ép Firefox nhận màu tối toàn cục */
+    scrollbar-width: thin !important;
+    scrollbar-color: #1e293b transparent !important;
   }
 
   body {
@@ -91,6 +93,62 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* --- CẤU HÌNH THANH CUỘN TOÀN CỤC CHUẨN DARK THEME --- */
+  ::-webkit-scrollbar {
+    width: 6px !important;
+    height: 6px !important;
+  }
+
+  ::-webkit-scrollbar-track {
+    background-color: transparent !important; 
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: #1e293b !important;
+    border-radius: 10px !important;
+    border: 1px solid #020617 !important;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #3b82f6 !important;
+  }
+
+  /* Ẩn triệt để nút mũi tên 2 đầu của Windows */
+  ::-webkit-scrollbar-button {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+  /* --- TRỊ SCROLLBAR BẰNG CSS THUẦN --- */
+.devmentor-scrollbar {
+  scrollbar-width: thin !important;
+  scrollbar-color: #1e293b transparent !important;
+}
+
+.devmentor-scrollbar::-webkit-scrollbar {
+  width: 6px !important;
+  background-color: transparent !important;
+}
+
+.devmentor-scrollbar::-webkit-scrollbar-track {
+  background-color: transparent !important;
+}
+
+.devmentor-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #1e293b !important;
+  border-radius: 9999px !important;
+  border: 1px solid #020617 !important;
+}
+
+.devmentor-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #3b82f6 !important;
+}
+
+/* Ẩn hai cái nút mũi tên của Windows */
+.devmentor-scrollbar::-webkit-scrollbar-button {
+  display: none !important;
+}
 }
 
 /**
@@ -144,4 +202,8 @@
 
 html {
   font-size: var(--font-size);
+  font-family: 'Inter', 'Roboto', 'Be Vietnam Pro', sans-serif !important;
+}
+body, p, span, li, div {
+  font-family: inherit;
 }

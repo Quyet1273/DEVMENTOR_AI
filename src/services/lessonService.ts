@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { aiService } from "./aiService";
 
 export const lessonService = {
   // 1. Lấy nội dung chi tiết bài học + Quiz
@@ -117,6 +118,84 @@ async completeLesson(userId: string, lessonId: number, earnedXp: number = 0, isP
     return { success: false };
   }
 },
+// hàm lưu content bài học do AI tạo ra
+async updateLessonContent(lessonId: number, content: string, codeExample: string) {
+    const { error } = await supabase
+      .from('lessons')
+      .update({ 
+        content: content, 
+        code_example: codeExample 
+      })
+      .eq('id', lessonId);
+
+    if (error) throw error;
+    return true;
+  },
+  bulkGenerateLessons: async (courseId?: string) => {
+    try {
+      // 1. Tìm các bài học đang bị trống nội dung
+      let query = supabase
+        .from("lessons")
+        .select("id, title, course_id, courses(title)")
+        .is("content", null);
+
+      // Nếu truyền courseId thì chỉ xử lý khóa học đó cho nhanh
+      if (courseId) {
+        query = query.eq("course_id", courseId);
+      }
+
+      const { data: emptyLessons, error: fetchError } = await query;
+
+      if (fetchError) throw fetchError;
+      if (!emptyLessons || emptyLessons.length === 0) {
+        return { success: true, message: "Không có bài học nào cần soạn nội dung!" };
+      }
+
+      console.log(`🚀 Mentor AI bắt đầu soạn ${emptyLessons.length} bài học...`);
+
+      // 2. Chạy vòng lặp tuần tự (Sequential) để tránh bị AI khóa (Rate Limit)
+      for (const [index, lesson] of emptyLessons.entries()) {
+        try {
+          console.log(`[${index + 1}/${emptyLessons.length}] Đang soạn: ${lesson.title}`);
+
+          // Gọi AI để lấy nội dung bài giảng
+          // Giả sử hàm generateLessonContent của ông nhận (title, courseTitle)
+          const aiResult = await aiService.generateLessonContent(
+            lesson.title, 
+            (lesson.courses as any)?.[0]?.title || ""
+          );
+
+          if (aiResult) {
+            // 3. Cập nhật thẳng vào Database
+            const { error: updateError } = await supabase
+              .from("lessons")
+              .update({
+                content: aiResult.content,
+                code_example: aiResult.code_example,
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", lesson.id);
+
+            if (updateError) throw updateError;
+            console.log(`✅ Lưu thành công bài: ${lesson.title}`);
+          }
+
+          // Nghỉ 2 giây để API AI "thở"
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        } catch (lessonError) {
+          console.error(`❌ Lỗi tại bài ${lesson.title}:`, lessonError);
+          // Gặp lỗi bài này thì bỏ qua làm bài tiếp theo
+          continue;
+        }
+      }
+
+      return { success: true, message: `Đã hoàn thành soạn ${emptyLessons.length} bài học!` };
+    } catch (error) {
+      console.error("Lỗi Bulk Generate:", error);
+      return { success: false, error };
+    }
+  }
 
 
 };

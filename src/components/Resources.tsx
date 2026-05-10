@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTheme } from '../context/ThemeContext'; // <-- 1. IMPORT THEME
 import {
   BookOpen,
   ExternalLink,
@@ -26,15 +27,9 @@ export function Resources() {
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // HỆ THỐNG MÀU HUD
-  const colors = {
-    bg: '#020617',
-    card: '#0f172a',
-    primary: '#22d3ee', // Cyan
-    secondary: '#a855f7', // Purple
-    text: '#d1d5db',
-    border: 'rgba(168, 85, 247, 0.2)'
-  };
+  // 2. LẤY MÀU TỪ HỆ THỐNG
+  const { theme, colors } = useTheme();
+  const isDark = theme === 'dark';
 
   const resourceTypes = [
     { id: 'all', name: 'Tất cả', icon: BookOpen },
@@ -74,28 +69,30 @@ export function Resources() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: colors.bg, padding: '40px', fontFamily: 'monospace', color: colors.text }}>
+    <div style={{ minHeight: '100vh', backgroundColor: colors.bg, padding: '40px', fontFamily: 'monospace', color: colors.text, transition: 'all 0.3s ease' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         
         {/* HEADER */}
         <div style={{ borderLeft: `4px solid ${colors.primary}`, paddingLeft: '20px', marginBottom: '40px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: 900, color: '#fff', textTransform: 'uppercase', letterSpacing: '2px' }}>
+          <h1 style={{ fontSize: '32px', fontWeight: 900, color: colors.text, textTransform: 'uppercase', letterSpacing: '2px' }}>
             Resource <span style={{ color: colors.primary }}>Archives</span>
           </h1>
-          <p style={{ color: '#64748b', fontSize: '12px', fontWeight: 'bold' }}>HỆ THỐNG TRUY XUẤT TÀI LIỆU V1.0 // CLASSIFIED DATA</p>
+          <p style={{ color: colors.muted, fontSize: '12px', fontWeight: 'bold' }}>HỆ THỐNG TRUY XUẤT TÀI LIỆU V1.0 // CLASSIFIED DATA</p>
         </div>
 
         {/* SEARCH & FILTERS BOX */}
-        <div style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '24px', padding: '32px', marginBottom: '40px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+        <div style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '24px', padding: '32px', marginBottom: '40px', boxShadow: isDark ? '0 10px 30px rgba(0,0,0,0.5)' : '0 10px 30px rgba(0,0,0,0.05)', transition: 'all 0.3s ease' }}>
           {/* Search Input */}
           <div style={{ position: 'relative', marginBottom: '32px' }}>
-            <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} size={20} />
+            <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: colors.muted }} size={20} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Tìm kiếm tài nguyên (Title, Description...)"
-              style={{ width: '100%', backgroundColor: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px 16px 16px 52px', color: '#fff', outline: 'none' }}
+              style={{ width: '100%', backgroundColor: colors.inputBg, border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '16px 16px 16px 52px', color: colors.text, outline: 'none', transition: 'all 0.3s ease' }}
+              onFocus={(e) => e.target.style.borderColor = colors.primary}
+              onBlur={(e) => e.target.style.borderColor = colors.border}
             />
           </div>
 
@@ -111,12 +108,14 @@ export function Resources() {
                   onClick={() => setSelectedType(type.id)}
                   style={{
                     padding: '10px 18px', borderRadius: '10px', border: '1px solid', 
-                    borderColor: selectedType === type.id ? colors.primary : 'rgba(255,255,255,0.05)',
-                    backgroundColor: selectedType === type.id ? 'rgba(34, 211, 238, 0.1)' : 'rgba(255,255,255,0.02)',
-                    color: selectedType === type.id ? colors.primary : '#64748b',
-                    fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s',
+                    borderColor: selectedType === type.id ? colors.primary : colors.border,
+                    backgroundColor: selectedType === type.id ? `${colors.primary}22` : colors.inputBg,
+                    color: selectedType === type.id ? colors.primary : colors.muted,
+                    fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease',
                     display: 'flex', alignItems: 'center', gap: '8px'
                   }}
+                  onMouseEnter={(e) => { if(selectedType !== type.id) e.currentTarget.style.borderColor = colors.primary; }}
+                  onMouseLeave={(e) => { if(selectedType !== type.id) e.currentTarget.style.borderColor = colors.border; }}
                 >
                   <type.icon size={14} /> {type.name.toUpperCase()}
                 </button>
@@ -136,11 +135,13 @@ export function Resources() {
                   onClick={() => setSelectedCategory(cat)}
                   style={{
                     padding: '8px 16px', borderRadius: '8px', border: '1px solid',
-                    borderColor: selectedCategory === cat ? colors.secondary : 'rgba(255,255,255,0.05)',
-                    backgroundColor: selectedCategory === cat ? 'rgba(168, 85, 247, 0.1)' : 'rgba(255,255,255,0.02)',
-                    color: selectedCategory === cat ? colors.secondary : '#475569',
-                    fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'
+                    borderColor: selectedCategory === cat ? colors.secondary : colors.border,
+                    backgroundColor: selectedCategory === cat ? `${colors.secondary}22` : colors.inputBg,
+                    color: selectedCategory === cat ? colors.secondary : colors.muted,
+                    fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease'
                   }}
+                  onMouseEnter={(e) => { if(selectedCategory !== cat) e.currentTarget.style.borderColor = colors.secondary; }}
+                  onMouseLeave={(e) => { if(selectedCategory !== cat) e.currentTarget.style.borderColor = colors.border; }}
                 >
                   {cat === 'all' ? 'ALL_CATEGORIES' : cat.toUpperCase()}
                 </button>
@@ -156,11 +157,14 @@ export function Resources() {
               key={res.id}
               style={{
                 backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '20px', padding: '24px',
-                display: 'flex', flexDirection: 'column', transition: '0.3s', position: 'relative', overflow: 'hidden'
+                display: 'flex', flexDirection: 'column', transition: 'all 0.3s ease', position: 'relative', overflow: 'hidden',
+                boxShadow: isDark ? 'none' : '0 4px 6px -1px rgba(0,0,0,0.05)'
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.borderColor = colors.primary; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = colors.border; }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: 'rgba(34, 211, 238, 0.05)', border: `1px solid ${colors.primary}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: `${colors.primary}15`, border: `1px solid ${colors.primary}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {res.type === 'video' ? <Video size={24} color={colors.primary} /> : res.type === 'project' ? <Code size={24} color={colors.primary} /> : <BookOpen size={24} color={colors.primary} />}
                 </div>
                 <span style={{ fontSize: '9px', fontWeight: 900, padding: '4px 10px', borderRadius: '4px', border: `1px solid ${getDifficultyColor(res.difficulty)}`, color: getDifficultyColor(res.difficulty), textTransform: 'uppercase' }}>
@@ -168,11 +172,11 @@ export function Resources() {
                 </span>
               </div>
 
-              <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginBottom: '12px', lineHeight: '1.4' }}>{res.title}</h3>
-              <p style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.6', marginBottom: '24px', flex: 1 }}>{res.description}</p>
+              <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: colors.text, marginBottom: '12px', lineHeight: '1.4' }}>{res.title}</h3>
+              <p style={{ fontSize: '13px', color: colors.muted, lineHeight: '1.6', marginBottom: '24px', flex: 1 }}>{res.description}</p>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', fontSize: '10px', fontWeight: 'bold', color: '#475569' }}>
-                <span style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '4px 8px', borderRadius: '4px' }}>#{res.category.toUpperCase()}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', fontSize: '10px', fontWeight: 'bold', color: colors.muted }}>
+                <span style={{ backgroundColor: colors.inputBg, padding: '4px 8px', borderRadius: '4px', border: `1px solid ${colors.border}` }}>#{res.category.toUpperCase()}</span>
                 {res.duration && <span>⏱ {res.duration}</span>}
               </div>
 
@@ -183,9 +187,12 @@ export function Resources() {
                 style={{
                   width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
                   background: `linear-gradient(to right, ${colors.primary}, ${colors.secondary})`,
-                  color: colors.bg, fontWeight: 900, fontSize: '12px', textTransform: 'uppercase',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', textDecoration: 'none'
+                  color: '#fff', fontWeight: 900, fontSize: '12px', textTransform: 'uppercase',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', textDecoration: 'none',
+                  transition: 'all 0.2s ease'
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
+                onMouseLeave={(e) => e.currentTarget.style.filter = 'brightness(1)'}
               >
                 Access Resource <ExternalLink size={14} />
               </a>
@@ -195,17 +202,21 @@ export function Resources() {
 
         {/* EMPTY STATE */}
         {filteredResources.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '100px 0', color: '#475569' }}>
+          <div style={{ textAlign: 'center', padding: '100px 0', color: colors.muted }}>
             <Search size={64} style={{ marginBottom: '20px', opacity: 0.2 }} />
             <p>NO DATA FOUND FOR CURRENT FILTERS</p>
           </div>
         )}
 
         {/* FOOTER SUGGESTION */}
-        <div style={{ marginTop: '60px', padding: '40px', borderRadius: '24px', background: `linear-gradient(135deg, ${colors.primary}22 0%, ${colors.secondary}22 100%)`, border: `1px solid ${colors.border}`, textAlign: 'center' }}>
-          <h3 style={{ color: '#fff', fontSize: '20px', fontWeight: 'bold', marginBottom: '12px' }}>DATA_GAP_DETECTED?</h3>
-          <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '24px' }}>Nếu Quỳnh không tìm thấy tài nguyên mình cần, hãy yêu cầu ngay tại Command Center.</p>
-          <button style={{ padding: '12px 32px', borderRadius: '10px', border: `1px solid ${colors.primary}`, backgroundColor: 'transparent', color: colors.primary, fontWeight: 'bold', cursor: 'pointer' }}>
+        <div style={{ marginTop: '60px', padding: '40px', borderRadius: '24px', background: `linear-gradient(135deg, ${colors.primary}15 0%, ${colors.secondary}15 100%)`, border: `1px solid ${colors.border}`, textAlign: 'center', transition: 'all 0.3s ease' }}>
+          <h3 style={{ color: colors.text, fontSize: '20px', fontWeight: 'bold', marginBottom: '12px' }}>DATA_GAP_DETECTED?</h3>
+          <p style={{ color: colors.muted, fontSize: '13px', marginBottom: '24px' }}>Không tìm thấy tài nguyên, hãy yêu cầu ngay tại Command Center.</p>
+          <button 
+            style={{ padding: '12px 32px', borderRadius: '10px', border: `1px solid ${colors.primary}`, backgroundColor: 'transparent', color: colors.primary, fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.primary; e.currentTarget.style.color = '#fff'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = colors.primary; }}
+          >
             REQUEST_NEW_DATA
           </button>
         </div>

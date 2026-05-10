@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { generateAIRoadmap } from "../services/aiService";
+import { saveAIRoadmap } from "../services/roadmapService";
 import { supabase } from "../lib/supabase";
 import {
   ChevronRight,
@@ -31,67 +33,70 @@ export function Roadmap() {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user) return;
+      // 1. Kiểm tra điều kiện đầu vào
+      if (!user || !courseId) {
+        setLoading(false); // Quan trọng: Phải tắt loading nếu không có dữ liệu
+        return;
+      }
+
       try {
         setLoading(true);
-        if (!courseId) {
-          const { data, error } = await supabase
-            .from("course_enrollments")
-            .select("*, courses(*)")
-            .eq("user_id", user.id);
-          if (error) throw error;
-          setMyEnrollments(data || []);
-        } else {
-          const { data: enroll } = await supabase
-            .from("course_enrollments")
-            .select("*, courses(title)")
-            .eq("user_id", user.id)
-            .eq("course_id", courseId)
-            .maybeSingle();
+        setErrorStatus(null); // Reset lỗi mỗi khi chạy lại
 
-          if (!enroll) {
-            setErrorStatus("Chưa đăng ký khóa này!");
-            return;
-          }
-          setEnrollment(enroll);
+        // 2. Logic Enroll
+        const { data: enroll } = await supabase
+          .from("course_enrollments")
+          .select("*, courses(title)")
+          .eq("user_id", user.id)
+          .eq("course_id", courseId)
+          .maybeSingle();
 
-          const { data: aiData } = await supabase
-            .from("ai_roadmaps")
-            .select(
-              `
-              id, ai_summary, 
-              roadmap_milestones (
-                id, title, description, order_index,
-                milestone_lessons (ai_note, lessons (id, title))
-              )
-            `,
-            )
-            .eq("course_id", courseId)
-            .eq("user_id", user.id)
-            .single();
+        if (!enroll) {
+          setErrorStatus("Chưa đăng ký khóa này!");
+          setLoading(false); // Phải tắt loading ở đây!
+          return;
+        }
+        setEnrollment(enroll);
 
-          if (aiData) {
-            aiData.roadmap_milestones.sort(
-              (a: any, b: any) => a.order_index - b.order_index,
+        // 3. Logic AI Roadmap
+        const { data: aiData } = await supabase
+          .from("ai_roadmaps")
+          .select(
+            `
+          id, ai_summary, 
+          roadmap_milestones (
+            id, title, description, order_index,
+            milestone_lessons (ai_note, lessons (id, title))
+          )
+        `,
+          )
+          .eq("course_id", courseId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (aiData && aiData.roadmap_milestones) {
+          aiData.roadmap_milestones.sort(
+            (a: any, b: any) => a.order_index - b.order_index,
+          );
+          setRoadmap(aiData);
+          if (aiData.roadmap_milestones.length > 0) {
+            setExpandedMilestones(
+              new Set([aiData.roadmap_milestones[0].id.toString()]),
             );
-            setRoadmap(aiData);
-            if (aiData.roadmap_milestones.length > 0) {
-              setExpandedMilestones(
-                new Set([aiData.roadmap_milestones[0].id.toString()]),
-              );
-            }
           }
+        } else {
+          setRoadmap(null); // Dữ liệu trống, sẵn sàng hiển thị nút "Tạo lộ trình"
         }
       } catch (err: any) {
         console.error(err);
         setErrorStatus("Hệ thống chưa tìm thấy dữ liệu.");
       } finally {
-        setLoading(false);
+        setLoading(false); // Luôn tắt loading cuối cùng
       }
     };
-    fetchData();
-  }, [courseId, user]);
 
+    fetchData();
+  }, [courseId, user?.id]); // Dùng user.id để tránh loop vô tận
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!bannerRef.current) return;
@@ -125,13 +130,54 @@ export function Roadmap() {
       return next;
     });
   };
+const handleCreateAIRoadmap = async () => {
+  if (!user || !courseId) return;
 
+  try {
+    setLoading(true);
+    
+    // 1. Lấy danh sách bài học thực tế để AI có "nguyên liệu" sắp xếp
+    const { data: lessons, error: lError } = await supabase
+      .from('lessons')
+      .select('id, title, order_num')
+      .eq('course_id', courseId);
+
+    if (lError || !lessons || lessons.length === 0) {
+      alert("Khóa học này chưa có bài học nào để AI sắp xếp!");
+      return;
+    }
+
+    // 2. Gọi AI sinh ra lộ trình JSON cá nhân hóa
+    // Bạn có thể lấy 'current_level' từ profile user nếu có
+    const aiResult = await generateAIRoadmap(
+      enrollment?.courses?.title || "Khóa học", 
+      { current_level: "Beginner" }, 
+      lessons
+    );
+
+    // 3. Lưu "cục" JSON này vào 3 bảng DB (ai_roadmaps, milestones, milestone_lessons)
+    const saveResult = await saveAIRoadmap(user.id, parseInt(courseId), aiResult);
+
+    if (saveResult.success) {
+      // 4. Reload để useEffect chạy lại và lấy dữ liệu mới nhất
+      window.location.reload(); 
+    } else {
+      alert("Lỗi lưu trữ: " + saveResult.error);
+    }
+  } catch (error) {
+    console.error("Lỗi kích hoạt AI:", error);
+    alert("AI đang bận một chút, bạn thử lại sau nhé!");
+  } finally {
+    setLoading(false);
+  }
+};
   if (loading)
     return (
       <div className="p-20 text-center font-mono text-cyan-400">
         ĐANG ĐỒNG BỘ DỮ LIỆU...
       </div>
     );
+
 
   return (
     <div className="p-6 bg-[#020617] min-h-screen">
@@ -422,6 +468,28 @@ export function Roadmap() {
           </div>
         )}
       </div>
+      {roadmap ? (
+        <div className="space-y-8">
+          {/* Code render milestones hiện tại của bạn */}
+        </div>
+      ) : (
+        /* Hiện cái này nếu roadmap === null */
+        <div className="mt-10 p-20 border-2 border-dashed border-cyan-900 rounded-3xl text-center">
+          <Sparkles className="w-12 h-12 text-cyan-500 mx-auto mb-4" />
+          <h3 className="text-white text-xl font-bold mb-2">
+            Chưa có lộ trình cá nhân hóa
+          </h3>
+          <p className="text-slate-400 mb-6">
+            Hãy để AI giúp bạn tối ưu hóa các bài học trong khóa học này.
+          </p>
+          <button
+            className="px-8 py-4 bg-cyan-600 rounded-xl font-bold text-white shadow-[0_0_20px_#0891b2]"
+            onClick={handleCreateAIRoadmap}
+          >
+            ✨ XÂY DỰNG LỘ TRÌNH BẰNG AI
+          </button>
+        </div>
+      )}
     </div>
   );
 }

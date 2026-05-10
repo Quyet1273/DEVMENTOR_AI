@@ -1,5 +1,8 @@
 import { useRef, useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
+import { useLanguage } from "../context/LanguageContext";
+import { translations } from "../data/translations";
 import { supabase } from "../lib/supabase";
 import { Link } from "react-router-dom";
 import {
@@ -28,6 +31,14 @@ import {
 
 export function Dashboard() {
   const { user } = useAuth();
+  const { language } = useLanguage();
+  const { theme, colors } = useTheme();
+  const isDark = theme === "dark";
+
+  const t =
+    translations[language as keyof typeof translations]?.dashboard ||
+    translations.vi.dashboard;
+
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalXp: 0,
@@ -37,27 +48,42 @@ export function Dashboard() {
     weeklyData: [] as any[],
   });
 
-  // Refs cho hiệu ứng Cursor Trail trong Banner
   const bannerRef = useRef<HTMLDivElement>(null);
   const blobRef = useRef<HTMLDivElement>(null);
   const mousePos = useRef({ x: 0, y: 0 });
   const blobPos = useRef({ x: 0, y: 0 });
 
-  // 1. Logic Fetch dữ liệu thực từ Database
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!user?.id) return;
       try {
         setLoading(true);
-        const { data: userData } = await supabase.from("users").select("xp, level").eq("id", user.id).single();
-        const { data: progress } = await supabase.from("user_progress").select("completed_at, xp_earned").eq("user_id", user.id).eq("is_completed", true);
+        const { data: userData } = await supabase
+          .from("users")
+          .select("xp, level")
+          .eq("id", user.id)
+          .single();
+        const { data: progress } = await supabase
+          .from("user_progress")
+          .select("completed_at, xp_earned")
+          .eq("user_id", user.id)
+          .eq("is_completed", true);
 
-        const days = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
-        const last7Days = [...Array(7)].map((_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() - i);
-          return { fullDate: d.toDateString(), dayName: days[d.getDay()], xp: 0 };
-        }).reverse();
+        const daysVi = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+        const daysEn = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const days = language === "vi" ? daysVi : daysEn;
+
+        const last7Days = [...Array(7)]
+          .map((_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            return {
+              fullDate: d.toDateString(),
+              dayName: days[d.getDay()],
+              xp: 0,
+            };
+          })
+          .reverse();
 
         progress?.forEach((item) => {
           const itemDate = new Date(item.completed_at).toDateString();
@@ -67,13 +93,19 @@ export function Dashboard() {
 
         const calculateStreak = (prog: any[]) => {
           if (!prog.length) return 0;
-          const uniqueDates = Array.from(new Set(prog.map(p => new Date(p.completed_at).toDateString())))
-            .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-          let streak = 0, checkDate = new Date();
+          const uniqueDates = Array.from(
+            new Set(prog.map((p) => new Date(p.completed_at).toDateString())),
+          ).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+          let streak = 0,
+            checkDate = new Date();
           for (let i = 0; i < uniqueDates.length; i++) {
             const d = new Date(uniqueDates[i]);
-            const diff = Math.floor((new Date(checkDate.toDateString()).getTime() - d.getTime()) / 86400000);
-            if (diff === i || diff === i - 1) streak++; else break;
+            const diff = Math.floor(
+              (new Date(checkDate.toDateString()).getTime() - d.getTime()) /
+                86400000,
+            );
+            if (diff === i || diff === i - 1) streak++;
+            else break;
           }
           return streak;
         };
@@ -83,14 +115,17 @@ export function Dashboard() {
           level: userData?.level || 1,
           completedLessons: progress?.length || 0,
           streak: calculateStreak(progress || []),
-          weeklyData: last7Days.map(d => ({ day: d.dayName, xp: d.xp })),
+          weeklyData: last7Days.map((d) => ({ day: d.dayName, xp: d.xp })),
         });
-      } catch (e) { console.error(e); } finally { setLoading(false); }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchDashboardData();
-  }, [user?.id]);
+  }, [user?.id, language]);
 
-  // 2. Logic hiệu ứng Cursor Trail
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!bannerRef.current) return;
@@ -110,35 +145,69 @@ export function Dashboard() {
     if (banner) {
       banner.addEventListener("mousemove", handleMouseMove);
       const animationId = requestAnimationFrame(animate);
-      return () => { banner.removeEventListener("mousemove", handleMouseMove); cancelAnimationFrame(animationId); };
+      return () => {
+        banner.removeEventListener("mousemove", handleMouseMove);
+        cancelAnimationFrame(animationId);
+      };
     }
   }, []);
 
-  // Mock data cho các phần chưa có trong DB để giữ UI không bị trống/lỗi
   const skillsData = user?.interested_skills
-  ? Object.entries(user.interested_skills).map(([skill, value]) => ({
-      skill: skill.toUpperCase(),
-      level: Number(value),
-    }))
-  : [];
+    ? Object.entries(user.interested_skills).map(([skill, value]) => ({
+        skill: skill.toUpperCase(),
+        level: Number(value),
+      }))
+    : [];
+
   const recentActivities = [
-    { id: 1, type: "completed", title: "Hoàn thành bài học mới", time: "Vừa xong", xp: 50 },
-    { id: 2, type: "streak", title: `Đạt streak ${stats.streak} ngày!`, time: "Hôm nay", xp: 100 }
+    {
+      id: 1,
+      type: "completed",
+      title: t.activities.lessonCompleted,
+      time: t.activities.justNow,
+      xp: 50,
+    },
+    {
+      id: 2,
+      type: "streak",
+      title: t.activities.streakReached.replace(
+        "{count}",
+        stats.streak.toString(),
+      ),
+      time: t.activities.today,
+      xp: 100,
+    },
   ];
+
   const upcomingTasks = [
-    { id: 1, title: "Tiếp tục lộ trình học", dueDate: "Hôm nay", priority: "high" },
-    { id: 2, title: "Làm bài tập củng cố", dueDate: "Ngày mai", priority: "medium" }
+    {
+      id: 1,
+      title: language === "vi" ? "Tiếp tục lộ trình học" : "Continue roadmap",
+      dueDate: t.activities.today,
+      priority: "high",
+    },
+    {
+      id: 2,
+      title: language === "vi" ? "Làm bài tập củng cố" : "Practice exercises",
+      dueDate: language === "vi" ? "Ngày mai" : "Tomorrow",
+      priority: "medium",
+    },
   ];
 
   const xpToNextLevel = 3000;
   const xpProgress = (stats.totalXp / xpToNextLevel) * 100;
 
-  if (loading) return <div className="p-8 text-white font-mono"> Đang tải dữ liệu...</div>;
+  if (loading)
+    return (
+      <div className="p-8 font-mono" style={{ color: colors.text }}>
+        {t.loading}
+      </div>
+    );
 
   return (
-    <div className="p-6">
+    <div className="p-6 transition-colors duration-300">
       <div className="max-w-7xl mx-auto">
-        {/* SECTION 1: PRO TECH BANNER */}
+        {/* BANNER SECTION */}
         <div
           ref={bannerRef}
           style={{
@@ -149,7 +218,9 @@ export function Dashboard() {
             padding: "100px 20px",
             backgroundColor: "#020617",
             border: "1px solid rgba(255, 255, 255, 0.1)",
-            boxShadow: "0 25px 50px rgba(0, 0, 0, 0.5)",
+            boxShadow: isDark
+              ? "0 25px 50px rgba(0, 0, 0, 0.5)"
+              : "0 15px 30px rgba(0,0,0,0.1)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -160,48 +231,8 @@ export function Dashboard() {
         >
           <style>{`
             @keyframes moveGrid { from { background-position: 0 0; } to { background-position: 0 45px; } }
-            @keyframes scanline { 0% { top: -100%; } 100% { top: 200%; } }
-            @keyframes pro-dot-pulse {
-              0%, 100% { transform: scale(1); opacity: 0.3; filter: blur(1px); box-shadow: none; }
-              50% { transform: scale(1.4); opacity: 1; filter: blur(0px); box-shadow: 0 0 15px currentColor; }
-            }
-              @keyframes name-glow-pulse {
-              0%, 100% { 
-                filter: drop-shadow(0 0 15px rgba(96, 165, 250, 0.5)) drop-shadow(0 0 30px rgba(168, 85, 247, 0.3));
-                opacity: 0.9;
-              }
-              50% { 
-                filter: drop-shadow(0 0 25px rgba(96, 165, 250, 0.8)) drop-shadow(0 0 50px rgba(168, 85, 247, 0.6));
-                opacity: 1;
-              }
-            }
-              /* Hiệu ứng nghệ cho Log Item */
-            .log-item-artistic {
-              position: relative;
-              overflow: hidden;
-              transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-
-            .log-item-artistic:hover {
-              /* Gradient nghệ thuật: Chạy từ màu brand sang trong suốt */
-              background: linear-gradient(90deg, rgba(59, 130, 246, 0.15) 0%, rgba(15, 23, 42, 0) 100%) !important;
-              transform: translateX(8px); /* Nhích nhẹ sang phải kiểu terminal */
-              box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.05);
-            }
-
-            /* Hiệu ứng chữ sáng lên khi hover */
-            .log-item-artistic:hover .log-title {
-              color: #ffffff !important;
-              text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
-            }
-
-            .log-item-artistic:hover .log-xp {
-              transform: scale(1.1);
-              filter: drop-shadow(0 0 8px currentColor);
-            }
           `}</style>
 
-          {/* Lớp lưới Grid */}
           <div
             style={{
               position: "absolute",
@@ -215,7 +246,6 @@ export function Dashboard() {
             }}
           />
 
-          {/* Hiệu ứng Blob theo chuột */}
           <div
             ref={blobRef}
             style={{
@@ -234,66 +264,7 @@ export function Dashboard() {
             }}
           />
 
-          {/* Scanline */}
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              height: "20%",
-              pointerEvents: "none",
-              zIndex: 2,
-              background:
-                "linear-gradient(to bottom, transparent, rgba(59, 130, 246, 0.05), transparent)",
-              animation: "scanline 6s linear infinite",
-            }}
-          />
-
-          {/* Nội dung Banner */}
           <div style={{ position: "relative", zIndex: 10 }}>
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-                justifyContent: "center",
-                marginBottom: "30px",
-              }}
-            >
-              <div
-                style={{
-                  width: "10px",
-                  height: "10px",
-                  borderRadius: "50%",
-                  backgroundColor: "#ef4444",
-                  color: "#ef4444",
-                  animation: "pro-dot-pulse 1.5s infinite ease-in-out",
-                  animationDelay: "0s",
-                }}
-              />
-              <div
-                style={{
-                  width: "10px",
-                  height: "10px",
-                  borderRadius: "50%",
-                  backgroundColor: "#eab308",
-                  color: "#eab308",
-                  animation: "pro-dot-pulse 1.5s infinite ease-in-out",
-                  animationDelay: "0.2s",
-                }}
-              />
-              <div
-                style={{
-                  width: "10px",
-                  height: "10px",
-                  borderRadius: "50%",
-                  backgroundColor: "#22c55e",
-                  color: "#22c55e",
-                  animation: "pro-dot-pulse 1.5s infinite ease-in-out",
-                  animationDelay: "0.4s",
-                }}
-              />
-            </div>
-
             <div style={{ color: "#ffffff" }}>
               <h1
                 style={{
@@ -304,7 +275,7 @@ export function Dashboard() {
                   letterSpacing: "-2px",
                 }}
               >
-                Xin chào, <br />
+                {t.banner.welcome} <br />
                 <span
                   style={{
                     background: "linear-gradient(to right, #60a5fa, #a855f7)",
@@ -313,7 +284,7 @@ export function Dashboard() {
                     filter: "drop-shadow(0 0 15px rgba(96, 165, 250, 0.4))",
                   }}
                 >
-                  {user?.name || "Học viên"}
+                  {user?.name || (language === "vi" ? "Học viên" : "Learner")}
                 </span>{" "}
                 ! 👋
               </h1>
@@ -337,73 +308,90 @@ export function Dashboard() {
                 }}
               >
                 <span style={{ color: "#60a5fa" }}>{`>> `}</span>
-                Chào mừng trở lại! Hãy tiếp tục hành trình học tập và chinh phục
-                những dòng code mới.
+                {t.banner.description}
               </p>
             </div>
           </div>
         </div>
 
-        {/* SECTION 2: STATS GRID */}
+        {/* STATS GRID */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 mt-8">
-          {/* CSS để tạo hiệu ứng Hover phát sáng */}
           <style>{`
-            .tech-card {
-              transition: all 0.3s ease;
-              background: #0f172a !important; /* Màu Slate 900 chuyên nghiệp */
-              border: 1px solid rgba(255, 255, 255, 0.05) !important;
-            }
-            .tech-card:hover {
-              transform: translateY(-5px);
-              border-color: currentColor !important;
-              box-shadow: 0 10px 30px -10px currentColor;
-            }
-            `}</style>
+            .tech-card { transition: all 0.3s ease; }
+            .tech-card:hover { transform: translateY(-5px); }
+          `}</style>
 
-          {/* Card 1: Streak - Màu Cam Amber (Hệ năng lượng) */}
-       {/* Card 1: Streak - Đã đổ stats.streak thực tế */}
+          {/* Card 1: Streak */}
           <div
             className="tech-card rounded-2xl p-6"
-            style={{ color: "#f59e0b" }}
+            style={{
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
+              color: "#f59e0b",
+            }}
           >
             <div className="flex items-center justify-between mb-4">
               <Flame
                 className="w-8 h-8"
                 style={{ filter: "drop-shadow(0 0 8px #f59e0b)" }}
               />
-              <span className="text-3xl font-black text-white">
+              <span
+                className="text-3xl font-black"
+                style={{ color: colors.text }}
+              >
                 {stats.streak}
               </span>
             </div>
-            <p className="text-xs uppercase tracking-widest font-mono text-gray-400">
-              System_Streak
+            {/* Dùng t.stats.streak thay vì viết cứng System_Streak */}
+            <p
+              className="text-xs uppercase tracking-widest font-mono"
+              style={{ color: colors.muted }}
+            >
+              {t.stats.streak}
             </p>
             <p className="text-[10px] text-amber-500/70 mt-1">
-              status: {stats.streak > 0 ? 'active_burning' : 'standby'}
+              status:{" "}
+              {stats.streak > 0
+                ? language === "vi"
+                  ? "đang cháy"
+                  : "active"
+                : "standby"}
             </p>
           </div>
 
-         {/* Card 2: Level - Đã đổ stats thực tế */}
+          {/* Card 2: Level */}
           <div
             className="tech-card rounded-2xl p-6"
-            style={{ color: "#06b6d4" }}
+            style={{
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
+              color: "#06b6d4",
+            }}
           >
             <div className="flex items-center justify-between mb-4">
               <Award
                 className="w-8 h-8"
                 style={{ filter: "drop-shadow(0 0 8px #06b6d4)" }}
               />
-              <span className="text-3xl font-black text-white">
+              <span
+                className="text-3xl font-black"
+                style={{ color: colors.text }}
+              >
                 {stats.level}
               </span>
             </div>
-            <p className="text-xs uppercase tracking-widest font-mono text-gray-400">
-              User_Authority
+            {/* Dùng t.stats.level thay vì viết cứng User_Authority */}
+            <p
+              className="text-xs uppercase tracking-widest font-mono"
+              style={{ color: colors.muted }}
+            >
+              {t.stats.level}
             </p>
-
-            {/* SỬA: Giảm mt-4 xuống mt-2 để kéo cả cụm lên */}
             <div className="mt-2">
-              <div className="w-full bg-gray-800 rounded-full h-1 overflow-hidden">
+              <div
+                style={{ backgroundColor: colors.inputBg }}
+                className="w-full rounded-full h-1 overflow-hidden"
+              >
                 <div
                   className="h-full transition-all duration-1000"
                   style={{
@@ -413,20 +401,22 @@ export function Dashboard() {
                   }}
                 />
               </div>
-              {/* SỬA: Giảm mt-2 xuống mt-1 để dòng XP ngang hàng với status card khác */}
-              <p className="text-[10px] text-gray-500 mt-1 font-mono ">
+              <p
+                className="text-[10px] mt-1 font-mono"
+                style={{ color: colors.muted }}
+              >
                 XP: {stats.totalXp} / {xpToNextLevel}
               </p>
             </div>
           </div>
 
-        {/* Card 3: Hours - Đã đổ stats.completedLessons thực tế */}
+          {/* Card 3: Hours/Lessons */}
           <div
             className="tech-card rounded-2xl p-6"
             style={{
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
               color: "#10b981",
-              background: "#0f172a",
-              border: "1px solid rgba(255, 255, 255, 0.05)",
             }}
           >
             <div className="flex items-center justify-between mb-4">
@@ -435,25 +425,33 @@ export function Dashboard() {
                 style={{ filter: "drop-shadow(0 0 8px currentColor)" }}
               />
               <span
-                className="text-3xl font-black text-white"
-                style={{ fontFamily: "sans-serif" }}
+                className="text-3xl font-black font-sans"
+                style={{ color: colors.text }}
               >
                 {stats.completedLessons}
               </span>
             </div>
-            <p className="text-xs uppercase tracking-widest font-mono text-gray-400">
-              Uptime_Total
+            {/* Dùng t.stats.lessons thay vì viết cứng Uptime_Total */}
+            <p
+              className="text-xs uppercase tracking-widest font-mono"
+              style={{ color: colors.muted }}
+            >
+              {t.stats.lessons}
             </p>
-            <p className="text-[10px] text-emerald-500/70 mt-1 font-mono">{`status: >_compiled_units`}</p>
+            <p className="text-[10px] text-emerald-500/70 mt-1 font-mono">
+              {language === "vi"
+                ? "trạng thái: đã hoàn thành"
+                : "status: completed"}
+            </p>
           </div>
 
-        {/* Card 4: Roadmap - Đã đổ dữ liệu phần trăm thực tế */}
+          {/* Card 4: Roadmap Progress */}
           <div
             className="tech-card rounded-2xl p-6"
             style={{
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
               color: "#8b5cf6",
-              background: "#0f172a",
-              border: "1px solid rgba(255, 255, 255, 0.05)",
             }}
           >
             <div className="flex items-center justify-between mb-4">
@@ -462,54 +460,72 @@ export function Dashboard() {
                 style={{ filter: "drop-shadow(0 0 8px currentColor)" }}
               />
               <span
-                className="text-3xl font-black text-white"
-                style={{ fontFamily: "sans-serif" }}
+                className="text-3xl font-black font-sans"
+                style={{ color: colors.text }}
               >
-                {Math.min(100, Math.round((stats.completedLessons / 20) * 100))}%
+                {Math.min(100, Math.round((stats.completedLessons / 20) * 100))}
+                %
               </span>
             </div>
-            <p className="text-xs uppercase tracking-widest font-mono text-gray-400">
-              Deployment_Progress
+            {/* Dùng t.stats.progress thay vì viết cứng Deployment_Progress */}
+            <p
+              className="text-xs uppercase tracking-widest font-mono"
+              style={{ color: colors.muted }}
+            >
+              {t.stats.progress}
             </p>
             <p className="text-[10px] text-purple-500/70 mt-1 font-mono">
-              {`status: ${stats.completedLessons}/20_compiled`}
+              {`status: ${stats.completedLessons}/20 ${language === "vi" ? "bài học" : "units"}`}
             </p>
           </div>
         </div>
 
-        {/* SECTION 3: CHARTS & TASKS */}
+        {/* CHARTS */}
         <div className="grid lg:grid-cols-2 gap-6 mb-8">
-         {/* Chart 1: Tiến độ 7 ngày - Đã fix dataKey đổ XP thực */}
           <div
             className="tech-card rounded-2xl p-6"
             style={{
-              background: "#0f172a",
-              border: "1px solid rgba(255, 255, 255, 0.05)",
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
             }}
           >
-            <h2 className="font-bold mb-6 flex items-center justify-center gap-2 text-white font-mono uppercase tracking-tighter">
-              <TrendingUp className="w-5 h-5 text-blue-500" />
-              Tiến độ học tập 7 ngày qua
+            <h2
+              className="font-bold mb-6 flex items-center justify-center gap-2 font-mono uppercase tracking-tighter"
+              style={{ color: colors.text }}
+            >
+              <TrendingUp
+                className="w-5 h-5"
+                style={{ color: colors.primary }}
+              />
+              {t.charts.progressTitle}
             </h2>
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={stats.weeklyData}>
                 <defs>
                   <linearGradient id="colorHours" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    <stop
+                      offset="5%"
+                      stopColor={colors.primary}
+                      stopOpacity={0.4}
+                    />
+                    <stop
+                      offset="95%"
+                      stopColor={colors.primary}
+                      stopOpacity={0}
+                    />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="#1e293b"
+                  stroke={colors.divider}
                 />
                 <XAxis
                   dataKey="day"
                   axisLine={false}
                   tickLine={false}
                   tick={{
-                    fill: "#64748b",
+                    fill: colors.muted,
                     fontSize: 12,
                     fontFamily: "monospace",
                   }}
@@ -518,25 +534,24 @@ export function Dashboard() {
                   axisLine={false}
                   tickLine={false}
                   tick={{
-                    fill: "#64748b",
+                    fill: colors.muted,
                     fontSize: 12,
                     fontFamily: "monospace",
                   }}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#0f172a",
+                    backgroundColor: colors.card,
                     borderRadius: "12px",
-                    border: "1px solid #3b82f6",
-                    boxShadow: "0 0 20px rgba(59, 130, 246, 0.2)",
-                    color: "#fff",
+                    border: `1px solid ${colors.primary}`,
+                    color: colors.text,
                   }}
-                  itemStyle={{ color: "#60a5fa" }}
+                  itemStyle={{ color: colors.primary }}
                 />
                 <Area
                   type="monotone"
-                  dataKey="xp" // SỬA CHỖ NÀY: Từ hours thành xp
-                  stroke="#3b82f6"
+                  dataKey="xp"
+                  stroke={colors.primary}
                   strokeWidth={3}
                   fillOpacity={1}
                   fill="url(#colorHours)"
@@ -545,26 +560,27 @@ export function Dashboard() {
             </ResponsiveContainer>
           </div>
 
-       {/* Chart 2: Phân tích kỹ năng - Đã đổ skillsData thực tế */}
           <div
             className="tech-card rounded-2xl p-6"
             style={{
-              background: "#0f172a",
-              border: "1px solid rgba(255, 255, 255, 0.05)",
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
             }}
           >
-            <h2 className="font-bold mb-6 flex items-center justify-center gap-2 text-white font-mono uppercase tracking-tighter">
-              <Award className="w-5 h-5 text-purple-500" />
-              Phân tích kỹ năng
+            <h2
+              className="font-bold mb-6 flex items-center justify-center gap-2 font-mono uppercase tracking-tighter"
+              style={{ color: colors.text }}
+            >
+              <Award className="w-5 h-5" style={{ color: colors.secondary }} />
+              {t.charts.skillsTitle}
             </h2>
             <ResponsiveContainer width="100%" height={300}>
               <RadarChart data={skillsData}>
-                {/* Lưới Radar màu tối mờ ảo */}
-                <PolarGrid stroke="#1e293b" />
+                <PolarGrid stroke={colors.divider} />
                 <PolarAngleAxis
                   dataKey="skill"
                   tick={{
-                    fill: "#94a3b8",
+                    fill: colors.muted,
                     fontSize: 10,
                     fontFamily: "monospace",
                   }}
@@ -572,361 +588,179 @@ export function Dashboard() {
                 <Radar
                   name="Level"
                   dataKey="level"
-                  stroke="#a855f7"
-                  fill="#a855f7"
+                  stroke={colors.secondary}
+                  fill={colors.secondary}
                   fillOpacity={0.5}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#0f172a",
-                    border: "1px solid #a855f7",
+                    backgroundColor: colors.card,
+                    border: `1px solid ${colors.secondary}`,
                     borderRadius: "10px",
+                    color: colors.text,
                   }}
-                  itemStyle={{ color: "#d8b4fe" }}
                 />
               </RadarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* SECTION 4: RECENT & TASKS */}
+        {/* LOGS, QUEUE, RANK */}
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* CỘT 1: SYSTEM LOGS (Đã nâng cấp Độ tương phản & Nghệ thuật) */}
           <div
             className="lg:col-span-1 tech-card rounded-2xl p-6"
             style={{
-              background: "#0f172a",
-              border: "1px solid rgba(255, 255, 255, 0.05)",
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
             }}
           >
-            <h2 className="font-bold mb-6 flex items-center justify-center gap-2 text-white font-mono uppercase tracking-tighter">
-              <CheckCircle2
-                className="w-5 h-5 text-blue-500"
-                style={{ filter: "drop-shadow(0 0 5px #3b82f6)" }}
-              />
-              <span style={{ opacity: 0.9 }}>Lịch sử hoạt động</span>
+            <h2
+              className="font-bold mb-6 flex items-center justify-center gap-2 font-mono uppercase tracking-tighter"
+              style={{ color: colors.text }}
+            >
+              <CheckCircle2 className="w-5 h-5 text-blue-500" />
+              {t.columns.history}
             </h2>
-
             <div className="space-y-4">
-              {recentActivities.map((activity) => (
+              {recentActivities.map((act) => (
                 <div
-                  key={activity.id}
-                  className="log-item-artistic flex items-center gap-4 p-4 rounded-r-xl group"
+                  key={act.id}
+                  className="flex items-center gap-4 p-4 rounded-r-xl"
                   style={{
-                    background: "rgba(30, 41, 59, 0.3)",
-                    borderLeft: `4px solid ${activity.type === "completed" ? "#10b981" : "#3b82f6"}`,
-                    cursor: "pointer",
+                    backgroundColor: colors.inputBg,
+                    borderLeft: `4px solid ${act.type === "completed" ? "#10b981" : "#3b82f6"}`,
                   }}
                 >
                   <div className="flex-1">
-                    {/* TIÊU ĐỀ: ÉP MÀU TRẮNG TUYỆT ĐỐI ĐỂ KHÔNG BỊ CHÌM */}
                     <p
-                      className="log-title font-bold text-sm transition-colors duration-300"
-                      style={{
-                        color: "#ffffff",
-                        textShadow: "0 0 10px rgba(255,255,255,0.1)",
-                      }}
+                      className="font-bold text-sm"
+                      style={{ color: colors.text }}
                     >
-                      {activity.title}
+                      {act.title}
                     </p>
-
-                    {/* SUBTEXT: DÙNG CYAN SÁNG HƠN MỘT CHÚT (70% OPACITY) ĐỂ DỄ ĐỌC */}
                     <p
-                      className="text-[10px] font-mono italic uppercase tracking-widest mt-1"
-                      style={{ color: "rgba(103, 232, 249, 0.7)" }}
+                      className="text-[10px] font-mono italic uppercase mt-1"
+                      style={{ color: colors.primary, opacity: 0.8 }}
                     >
-                      {`timestamp: ${activity.time}`}
+                      timestamp: {act.time}
                     </p>
                   </div>
-
-                  <div className="text-right">
-                    {/* XP: DÙNG BLUE-400 SÁNG ĐỂ TẠO ĐIỂM NHẤN */}
-                    <p
-                      className="log-xp font-black font-mono text-xs transition-all duration-300"
-                      style={{ color: "#60a5fa" }}
-                    >
-                      {`+${activity.xp}XP`}
-                    </p>
-                  </div>
+                  <p
+                    className="font-black font-mono text-xs"
+                    style={{ color: colors.primary }}
+                  >
+                    +{act.xp}XP
+                  </p>
                 </div>
               ))}
             </div>
-            {/* Decor nhẹ dưới đáy cho nghệ */}
-            <div className="mt-6 pt-4 border-t border-white/5 flex justify-between items-center">
-              <div className="flex gap-1">
-                <div className="w-1 h-1 rounded-full bg-blue-500/40"></div>
-                <div className="w-8 h-1 rounded-full bg-blue-500/20"></div>
-              </div>
-              {/* <span className="text-[9px] font-mono text-gray-600 uppercase tracking-widest">Auto_Refresh: ON</span> */}
-            </div>
           </div>
 
-          {/* CỘT 2: TASK QUEUE (Đã đồng bộ Form & Hover với Cột 1) */}
           <div
             className="tech-card rounded-2xl p-6"
             style={{
-              background: "#0f172a",
-              border: "1px solid rgba(255, 255, 255, 0.05)",
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
             }}
           >
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-bold flex items-center justify-center gap-2 text-white font-mono uppercase tracking-tighter">
-                <Calendar
-                  className="w-5 h-5 text-purple-500"
-                  style={{ filter: "drop-shadow(0 0 5px #a855f7)" }}
-                />
-                <span style={{ color: "#ffffff", opacity: 0.9 }}>Nhiệm vụ</span>
-              </h2>
-              <Link
-                to="/roadmap"
-                className="text-[10px] text-purple-400 font-black hover:text-purple-300 tracking-widest font-mono"
-              >
-                Tất cả
-              </Link>
-            </div>
-
+            <h2
+              className="font-bold flex items-center gap-2 mb-6 font-mono uppercase tracking-tighter"
+              style={{ color: colors.text }}
+            >
+              <Calendar className="w-5 h-5 text-purple-500" />
+              {t.columns.tasks}
+            </h2>
             <div className="space-y-3">
               {upcomingTasks.map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center gap-4 p-4 rounded-r-xl transition-all duration-300 group"
+                  className="flex items-center gap-4 p-4 rounded-r-xl"
                   style={{
-                    background: "rgba(30, 41, 59, 0.3)",
-                    // Border trái theo màu Priority: High (Đỏ), Medium (Xanh), Low (Tím)
-                    borderLeft: `4px solid ${
-                      task.priority === "high"
-                        ? "#ef4444"
-                        : task.priority === "medium"
-                          ? "#3b82f6"
-                          : "#a855f7"
-                    }`,
-                    cursor: "pointer",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                  // Hiệu ứng Hover Gradient Tím (đặc trưng của Task Queue)
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background =
-                      "linear-gradient(90deg, rgba(168, 85, 247, 0.15) 0%, rgba(15, 23, 42, 0) 100%)";
-                    e.currentTarget.style.transform = "translateX(8px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "rgba(30, 41, 59, 0.3)";
-                    e.currentTarget.style.transform = "translateX(0)";
+                    backgroundColor: colors.inputBg,
+                    borderLeft: `4px solid ${task.priority === "high" ? "#ef4444" : "#3b82f6"}`,
                   }}
                 >
                   <div className="flex-1">
-                    {/* TIÊU ĐỀ: Fix màu trắng Slate-50 giống Cột 1 */}
                     <p
                       style={{
-                        color: "#f8fafc",
+                        color: colors.text,
                         fontWeight: "bold",
                         fontSize: "13px",
-                        marginBottom: "4px",
                       }}
                     >
                       {task.title}
                     </p>
-
-                    {/* SUBTEXT: Màu Cyan HUD mờ ảo */}
                     <p
                       style={{
-                        color: "#67e8f9",
-                        opacity: 0.5,
+                        color: colors.secondary,
+                        opacity: 0.8,
                         fontSize: "9px",
                         fontFamily: "monospace",
-                        fontStyle: "italic",
-                        textTransform: "uppercase",
                       }}
                     >
-                      {`sched: ${task.dueDate}`}
+                      sched: {task.dueDate}
                     </p>
-                  </div>
-
-                  <div className="text-right">
-                    <span
-                      style={{
-                        backgroundColor: "rgba(255,255,255,0.03)",
-                        color:
-                          task.priority === "high"
-                            ? "#ef4444"
-                            : task.priority === "medium"
-                              ? "#3b82f6"
-                              : "#a855f7",
-                        border: `1px solid ${task.priority === "high" ? "rgba(239, 68, 68, 0.3)" : "rgba(59, 130, 246, 0.3)"}`,
-                        filter: "drop-shadow(0 0 2px currentColor)",
-                      }}
-                      className="text-[9px] px-2 py-0.5 rounded font-black font-mono"
-                    >
-                      {task.priority.toUpperCase()}
-                    </span>
                   </div>
                 </div>
               ))}
             </div>
-
-            {/* Decor chân trang đồng bộ với Cột 1 */}
-            <div className="mt-6 pt-4 border-t border-white/5 flex justify-between items-center opacity-30">
-              <div className="flex gap-1">
-                <div className="w-1 h-1 rounded-full bg-purple-500"></div>
-                <div className="w-6 h-1 rounded-full bg-purple-500/50"></div>
-              </div>
-              <span className="text-[8px] font-mono text-white tracking-[0.2em]">
-                QUEUE: STABLE
-              </span>
-            </div>
           </div>
-          {/* CỘT 3: TOP RANK (Đã đồng bộ Form & Hover Emerald nghệ thuật) */}
+
           <div
             className="tech-card rounded-2xl p-6"
             style={{
-              background: "#0f172a",
-              border: "1px solid rgba(255, 255, 255, 0.05)",
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
             }}
           >
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-bold flex items-center gap-2 text-white font-mono uppercase tracking-tighter">
-                <TrendingUp
-                  className="w-5 h-5 text-emerald-400"
-                  style={{ filter: "drop-shadow(0 0 5px #10b981)" }}
-                />
-                <span style={{ color: "#ffffff", opacity: 0.9 }}>
-                  Xếp hạng{" "}
-                </span>
-              </h2>
-            </div>
-
+            <h2
+              className="font-bold flex items-center gap-2 mb-6 font-mono uppercase tracking-tighter"
+              style={{ color: colors.text }}
+            >
+              <TrendingUp className="w-5 h-5 text-emerald-400" />
+              {t.columns.ranking}
+            </h2>
             <div className="space-y-4">
               {[
-                {
-                  rank: 1,
-                  name: "Trần Anh Tuấn",
-                  xp: "12,450",
-                  avatar: "https://i.pravatar.cc/150?u=1",
-                },
-                {
-                  rank: 2,
-                  name: "Bùi Quỳnh",
-                  xp: "10,200",
-                  avatar: "https://i.pravatar.cc/150?u=2",
-                },
-                {
-                  rank: 3,
-                  name: "Lê Minh",
-                  xp: "8,900",
-                  avatar: "https://i.pravatar.cc/150?u=3",
-                },
-                {
-                  rank: 15,
-                  name: user?.name || "Nguyễn Văn Quyết",
-                  xp: user?.xp || "0",
-                  isMe: true,
-                },
-              ].map((top, index) => (
+                { rank: 1, name: "Trần Anh", xp: "12,450" },
+                { rank: 15, name: t.columns.you, xp: "10,200", isMe: true },
+              ].map((top, idx) => (
                 <div
-                  key={index}
-                  className="flex items-center gap-3 p-3 rounded-r-xl transition-all duration-300 group"
+                  key={idx}
+                  className="flex items-center gap-3 p-3 rounded-r-xl"
                   style={{
-                    background: top.isMe
-                      ? "rgba(59, 130, 246, 0.1)"
-                      : "rgba(30, 41, 59, 0.3)",
-                    borderLeft: `4px solid ${top.rank === 1 ? "#f59e0b" : top.isMe ? "#3b82f6" : "transparent"}`,
-                    cursor: "pointer",
-                    position: "relative",
-                    overflow: "hidden",
-                    border: top.isMe
-                      ? "1px solid rgba(59, 130, 246, 0.2)"
-                      : "none",
-                  }}
-                  // Hiệu ứng Hover Gradient Emerald (Xanh lá - màu của sự tăng trưởng)
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background =
-                      "linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(15, 23, 42, 0) 100%)";
-                    e.currentTarget.style.transform = "translateX(8px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = top.isMe
-                      ? "rgba(59, 130, 246, 0.1)"
-                      : "rgba(30, 41, 59, 0.3)";
-                    e.currentTarget.style.transform = "translateX(0)";
+                    backgroundColor: top.isMe
+                      ? `${colors.primary}22`
+                      : colors.inputBg,
+                    borderLeft: `4px solid ${top.isMe ? colors.primary : "transparent"}`,
                   }}
                 >
-                  {/* Số thứ hạng font Mono */}
                   <span
-                    className={`font-mono text-[10px] w-4 ${
-                      top.rank === 1
-                        ? "text-yellow-400"
-                        : top.rank === 2
-                          ? "text-gray-300"
-                          : top.rank === 3
-                            ? "text-orange-400"
-                            : "text-gray-500"
-                    }`}
-                    style={{
-                      textShadow:
-                        top.rank <= 3 ? "0 0 5px currentColor" : "none",
-                    }}
+                    className="font-mono text-[10px] w-4"
+                    style={{ color: top.rank === 1 ? "#f59e0b" : colors.muted }}
                   >
                     #{top.rank}
                   </span>
-
-                  {/* Avatar với viền mỏng */}
-                  <div className="w-8 h-8 rounded-full border border-white/10 overflow-hidden bg-slate-800 flex-shrink-0">
-                    <img
-                      src={
-                        top.avatar ||
-                        `https://ui-avatars.com/api/?name=${top.name}&background=0f172a&color=fff`
-                      }
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    {/* TÊN: Fix màu Slate-50 rực rỡ */}
+                  <div className="flex-1">
                     <p
-                      className="truncate"
                       style={{
-                        color: "#f8fafc",
+                        color: colors.text,
                         fontWeight: "bold",
                         fontSize: "12px",
                       }}
                     >
-                      {top.name}{" "}
-                      {top.isMe && (
-                        <span className="text-[9px] text-blue-400 ml-1">
-                          (Bạn)
-                        </span>
-                      )}
+                      {top.name}
                     </p>
-                    {/* XP: Dùng màu Emerald mờ đúng vibe Ranking */}
                     <p
-                      className="font-mono"
-                      style={{
-                        color: "#10b981",
-                        opacity: 0.7,
-                        fontSize: "9px",
-                      }}
+                      className="font-mono text-[9px]"
+                      style={{ color: "#10b981" }}
                     >
                       {top.xp} XP
                     </p>
                   </div>
-
-                  {/* Huy hiệu nhỏ cho Top 1 */}
-                  {top.rank === 1 && (
-                    <Award
-                      className="w-4 h-4 text-yellow-400"
-                      style={{ filter: "drop-shadow(0 0 5px #f59e0b)" }}
-                    />
-                  )}
                 </div>
               ))}
             </div>
-
-            {/* Button Footer đồng bộ style CLI */}
-            <button className="w-full mt-6 py-2 border border-emerald-500/20 rounded-xl text-[10px] text-emerald-400 font-black tracking-widest hover:bg-emerald-500/10 transition-all uppercase font-mono">
-              Generate_Ranking_Report
-            </button>
           </div>
         </div>
       </div>

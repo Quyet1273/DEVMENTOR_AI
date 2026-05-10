@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useTheme } from "../context/ThemeContext"; // <-- 1. IMPORT THEME
 import { statsService } from "../services/statsService";
 import {
   Search,
@@ -37,27 +38,22 @@ ChartJS.register(
 );
 
 export function AdminReport() {
+  // 2. LẤY MÀU TỪ HỆ THỐNG
+  const { theme, colors } = useTheme();
+  const isDark = theme === "dark";
+
   const [users, setUsers] = useState<any[]>([]);
   const [trafficData, setTrafficData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedUser, setSelectedUser] = useState<any>(null); // Lưu user đang được xem chi tiết
-  const [isModalOpen, setIsModalOpen] = useState(false); // Trạng thái đóng/mở modal
-  const [lockedUsers, setLockedUsers] = useState<number[]>([]); // Lưu danh sách ID những đứa bị khóa
+  const [selectedUser, setSelectedUser] = useState<any>(null); 
+  const [isModalOpen, setIsModalOpen] = useState(false); 
+  const [lockedUsers, setLockedUsers] = useState<number[]>([]); 
   const [dateRange, setDateRange] = useState({
     start: "2024-03-01",
     end: "2024-03-31",
   });
   const [filterStatus, setFilterStatus] = useState("all");
-  const [filterLevel, setFilterLevel] = useState("all"); // THÊM DÒNG NÀY NÈ
-  const colors = {
-    bg: "#020617",
-    card: "#0f172a",
-    primary: "#22d3ee",
-    secondary: "#a855f7",
-    text: "#f8fafc",
-    muted: "#64748b",
-    border: "rgba(34, 211, 238, 0.1)",
-  };
+  const [filterLevel, setFilterLevel] = useState("all");
 
   useEffect(() => {
     statsService.getDetailedUserStats().then(setUsers);
@@ -74,21 +70,18 @@ export function AdminReport() {
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
-      // 1. Lọc theo search
       const matchesSearch =
         u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.email?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // 2. Lọc theo Level
       const matchesLevel =
         filterLevel === "all" || u.level?.toString() === filterLevel;
 
-      // 3. Lọc theo trạng thái hoàn thành
       let matchesStatus = true;
       if (filterStatus === "completed") {
-        matchesStatus = u.completed_courses > 0; // Có ít nhất 1 khóa 100%
+        matchesStatus = u.completed_courses > 0; 
       } else if (filterStatus === "learning") {
-        matchesStatus = u.completed_courses === 0; // Chưa xong khóa nào 100%
+        matchesStatus = u.completed_courses === 0; 
       }
 
       return matchesSearch && matchesLevel && matchesStatus;
@@ -101,7 +94,6 @@ export function AdminReport() {
       return;
     }
 
-    // Chuẩn bị dữ liệu: Thứ tự các key ở đây sẽ là thứ tự cột trong Excel
     const dataToExport = filteredUsers.map((u) => ({
       "Họ Tên": u.name,
       Email: u.email,
@@ -110,24 +102,20 @@ export function AdminReport() {
       "Ngày Tham Gia": new Date(u.created_at).toLocaleDateString("vi-VN"),
       "Số Khóa Đang Học": u.total_courses,
       "Số Khóa Hoàn Thành": u.completed_courses,
-      // CỘT TRẠNG THÁI CHUẨN ĐÂY
       "Trạng Thái Học Tập":
         u.completed_courses > 0 ? "Đã tốt nghiệp" : "Đang học",
       "Tình Trạng Tài Khoản": "Đang hoạt động",
       "Ngày Xuất Báo Cáo": new Date().toLocaleDateString("vi-VN"),
     }));
 
-    // Tạo file Excel
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Danh Sách Học Viên");
 
-    // Đặt tên file có ngày giờ cho uy tín
     const dateStr = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `Bao_Cao_Admin_DevMentor_${dateStr}.xlsx`);
   };
 
-  // Cấu hình biểu đồ
   const chartConfig = {
     labels: trafficData.map((d) => d.date),
     datasets: [
@@ -136,23 +124,22 @@ export function AdminReport() {
         data: trafficData.map((d) => d.views),
         fill: true,
         borderColor: colors.primary,
-        backgroundColor: "rgba(34, 211, 238, 0.1)",
+        backgroundColor: `${colors.primary}22`,
         tension: 0.4,
       },
     ],
   };
-  // Mở modal xem chi tiết
+
   const handleViewDetail = (user: any) => {
     setSelectedUser(user);
     setIsModalOpen(true);
   };
 
-  // Đổi trạng thái Khóa/Mở (Toggle)
   const handleToggleLock = (userId: number) => {
     if (lockedUsers.includes(userId)) {
-      setLockedUsers(lockedUsers.filter((id) => id !== userId)); // Mở khóa
+      setLockedUsers(lockedUsers.filter((id) => id !== userId)); 
     } else {
-      setLockedUsers([...lockedUsers, userId]); // Khóa
+      setLockedUsers([...lockedUsers, userId]); 
     }
   };
 
@@ -164,16 +151,11 @@ export function AdminReport() {
         color: colors.text,
         padding: "40px",
         fontFamily: "'Inter', sans-serif",
+        transition: "all 0.3s ease",
       }}
     >
       {/* HEADER */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: "30px",
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "30px" }}>
         <h1 style={{ fontSize: "28px", fontWeight: 800 }}>
           THỐNG KÊ <span style={{ color: colors.primary }}>HỆ THỐNG</span>
         </h1>
@@ -184,13 +166,16 @@ export function AdminReport() {
             alignItems: "center",
             gap: "8px",
             backgroundColor: colors.primary,
-            color: colors.bg,
+            color: isDark ? "#020617" : "#fff",
             padding: "10px 20px",
             borderRadius: "10px",
             fontWeight: 700,
             border: "none",
             cursor: "pointer",
+            transition: "0.2s",
           }}
+          onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.1)"}
+          onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
         >
           <Download size={18} /> XUẤT EXCEL
         </button>
@@ -204,45 +189,39 @@ export function AdminReport() {
           borderRadius: "20px",
           border: `1px solid ${colors.border}`,
           marginBottom: "30px",
+          boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.3)" : "0 4px 20px rgba(0,0,0,0.05)",
+          transition: "all 0.3s ease",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            marginBottom: "20px",
-          }}
-        >
-          <h3 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
+          <h3 style={{ display: "flex", alignItems: "center", gap: "10px", color: colors.text }}>
             <BarChart3 size={20} color={colors.primary} /> Lượng truy cập
           </h3>
           <div style={{ display: "flex", gap: "10px" }}>
             <input
               type="date"
               value={dateRange.start}
-              onChange={(e) =>
-                setDateRange({ ...dateRange, start: e.target.value })
-              }
+              onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
               style={{
-                backgroundColor: colors.bg,
-                color: "#fff",
-                border: "1px solid #334155",
+                backgroundColor: colors.inputBg,
+                color: colors.text,
+                border: `1px solid ${colors.border}`,
                 padding: "5px 10px",
                 borderRadius: "8px",
+                outline: "none",
               }}
             />
             <input
               type="date"
               value={dateRange.end}
-              onChange={(e) =>
-                setDateRange({ ...dateRange, end: e.target.value })
-              }
+              onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
               style={{
-                backgroundColor: colors.bg,
-                color: "#fff",
-                border: "1px solid #334155",
+                backgroundColor: colors.inputBg,
+                color: colors.text,
+                border: `1px solid ${colors.border}`,
                 padding: "5px 10px",
                 borderRadius: "8px",
+                outline: "none",
               }}
             />
             <button
@@ -254,6 +233,7 @@ export function AdminReport() {
                 padding: "5px 15px",
                 borderRadius: "8px",
                 cursor: "pointer",
+                fontWeight: "bold",
               }}
             >
               Lọc
@@ -266,9 +246,20 @@ export function AdminReport() {
             options={{
               responsive: true,
               maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  labels: { color: colors.text }
+                }
+              },
               scales: {
-                y: { grid: { color: "rgba(255,255,255,0.05)" } },
-                x: { grid: { display: false } },
+                y: { 
+                  grid: { color: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
+                  ticks: { color: colors.muted }
+                },
+                x: { 
+                  grid: { display: false },
+                  ticks: { color: colors.muted }
+                },
               },
             }}
           />
@@ -282,6 +273,8 @@ export function AdminReport() {
           borderRadius: "20px",
           border: `1px solid ${colors.border}`,
           overflow: "hidden",
+          boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.3)" : "0 4px 20px rgba(0,0,0,0.05)",
+          transition: "all 0.3s ease",
         }}
       >
         <div
@@ -293,16 +286,10 @@ export function AdminReport() {
             alignItems: "center",
           }}
         >
-          {/* Ô Tìm Kiếm (Chiếm 40%) */}
+          {/* Ô Tìm Kiếm */}
           <div style={{ flex: 2, position: "relative" }}>
             <Search
-              style={{
-                position: "absolute",
-                left: "12px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: colors.muted,
-              }}
+              style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: colors.muted }}
               size={18}
             />
             <input
@@ -310,29 +297,33 @@ export function AdminReport() {
               style={{
                 width: "100%",
                 padding: "12px 12px 12px 40px",
-                backgroundColor: colors.bg,
-                border: "1px solid #1e293b",
+                backgroundColor: colors.inputBg,
+                border: `1px solid ${colors.border}`,
                 borderRadius: "10px",
-                color: "#fff",
+                color: colors.text,
                 outline: "none",
+                transition: "all 0.3s ease",
               }}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onFocus={(e) => e.currentTarget.style.borderColor = colors.primary}
+              onBlur={(e) => e.currentTarget.style.borderColor = colors.border}
             />
           </div>
 
-          {/* Lọc Level (Chiếm 30%) */}
+          {/* Lọc Level */}
           <select
             value={filterLevel}
             onChange={(e) => setFilterLevel(e.target.value)}
             style={{
               flex: 1,
               padding: "12px",
-              backgroundColor: colors.bg,
-              border: "1px solid #1e293b",
+              backgroundColor: colors.inputBg,
+              border: `1px solid ${colors.border}`,
               borderRadius: "10px",
-              color: "#fff",
+              color: colors.text,
               outline: "none",
               cursor: "pointer",
+              transition: "all 0.3s ease",
             }}
           >
             <option value="all">Mọi cấp độ</option>
@@ -341,19 +332,20 @@ export function AdminReport() {
             <option value="3">Level 3</option>
           </select>
 
-          {/* Lọc Hoàn Thành (Chiếm 30%) - Cái mày cần đây */}
+          {/* Lọc Hoàn Thành */}
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             style={{
               flex: 1,
               padding: "12px",
-              backgroundColor: colors.bg,
-              border: "1px solid #1e293b",
+              backgroundColor: colors.inputBg,
+              border: `1px solid ${colors.border}`,
               borderRadius: "10px",
-              color: "#fff",
+              color: colors.text,
               outline: "none",
               cursor: "pointer",
+              transition: "all 0.3s ease",
             }}
           >
             <option value="all">Tất cả tiến độ</option>
@@ -361,229 +353,82 @@ export function AdminReport() {
             <option value="learning">Đang học dở dang</option>
           </select>
         </div>
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            tableLayout: "fixed",
-          }}
-        >
+        
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
           <thead>
-            <tr
-              style={{
-                backgroundColor: "rgba(255,255,255,0.02)",
-                textAlign: "left",
-              }}
-            >
-              <th
-                style={{
-                  padding: "12px 15px",
-                  color: colors.primary,
-                  fontSize: "11px",
-                  width: "25%",
-                }}
-              >
-                TÊN HỌC VIÊN
-              </th>
-              <th
-                style={{
-                  padding: "12px 15px",
-                  color: colors.primary,
-                  fontSize: "11px",
-                  width: "15%",
-                }}
-              >
-                EMAIL
-              </th>
-              <th
-                style={{
-                  padding: "12px 15px",
-                  color: colors.primary,
-                  fontSize: "11px",
-                  width: "12%",
-                }}
-              >
-                LEVEL
-              </th>
-              <th
-                style={{
-                  padding: "12px 15px",
-                  color: colors.primary,
-                  fontSize: "11px",
-                  width: "15%",
-                }}
-              >
-                NGÀY TẠO
-              </th>
-              <th
-                style={{
-                  padding: "12px 15px",
-                  color: colors.primary,
-                  fontSize: "11px",
-                  width: "15%",
-                }}
-              >
-                TRẠNG THÁI
-              </th>
-              <th
-                style={{
-                  padding: "12px 15px",
-                  color: colors.primary,
-                  fontSize: "11px",
-                  width: "18%",
-                }}
-              >
-                THAO TÁC
-              </th>
+            <tr style={{ backgroundColor: isDark ? "rgba(255,255,255,0.02)" : colors.inputBg, textAlign: "left" }}>
+              <th style={{ padding: "12px 15px", color: colors.primary, fontSize: "11px", width: "25%" }}>TÊN HỌC VIÊN</th>
+              <th style={{ padding: "12px 15px", color: colors.primary, fontSize: "11px", width: "15%" }}>EMAIL</th>
+              <th style={{ padding: "12px 15px", color: colors.primary, fontSize: "11px", width: "12%" }}>LEVEL</th>
+              <th style={{ padding: "12px 15px", color: colors.primary, fontSize: "11px", width: "15%" }}>NGÀY TẠO</th>
+              <th style={{ padding: "12px 15px", color: colors.primary, fontSize: "11px", width: "15%" }}>TRẠNG THÁI</th>
+              <th style={{ padding: "12px 15px", color: colors.primary, fontSize: "11px", width: "18%" }}>THAO TÁC</th>
             </tr>
           </thead>
           <tbody>
             {filteredUsers.map((u) => (
-              <tr
-                key={u.id}
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}
+              <tr 
+                key={u.id} 
+                style={{ borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}`, transition: "0.2s" }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)"}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
               >
-                {/* 1. TÊN */}
                 <td style={{ padding: "12px 15px" }}>
-                  <div
-                    style={{ fontWeight: 600, fontSize: "13px", color: "#fff" }}
-                  >
+                  <div style={{ fontWeight: 600, fontSize: "13px", color: colors.text }}>
                     {u.name}
                   </div>
                 </td>
-
-                {/* 2. EMAIL */}
                 <td style={{ padding: "12px 15px" }}>
-                  <div
-                    style={{
-                      color: colors.muted,
-                      fontSize: "12px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
+                  <div style={{ color: colors.muted, fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {u.email}
                   </div>
                 </td>
-
-                {/* 3. LEVEL */}
                 <td style={{ padding: "12px 15px" }}>
-                  <span
-                    style={{
-                      color: colors.secondary,
-                      fontWeight: "bold",
-                      fontSize: "12px",
-                    }}
-                  >
+                  <span style={{ color: colors.secondary, fontWeight: "bold", fontSize: "12px" }}>
                     Lvl {u.level}
                   </span>
                 </td>
-
-                {/* 4. NGÀY TẠO (Mày bị thiếu thẻ td này nãy nè) */}
                 <td style={{ padding: "12px 15px" }}>
                   <div style={{ color: colors.muted, fontSize: "12px" }}>
                     {new Date(u.created_at).toLocaleDateString("vi-VN")}
                   </div>
                 </td>
-
-                {/* 5. TRẠNG THÁI */}
                 <td style={{ padding: "12px 15px" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "2px",
-                    }}
-                  >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                     {u.completed_courses > 0 ? (
-                      <span
-                        style={{
-                          color: colors.primary,
-                          fontSize: "11px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                        }}
-                      >
+                      <span style={{ color: colors.primary, fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}>
                         <CheckCircle size={12} /> Đã tốt nghiệp
                       </span>
                     ) : (
-                      <span
-                        style={{
-                          color: colors.muted,
-                          fontSize: "11px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "5px",
-                            height: "5px",
-                            borderRadius: "50%",
-                            backgroundColor: colors.secondary,
-                          }}
-                        ></div>{" "}
-                        Đang học
+                      <span style={{ color: colors.muted, fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <div style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: colors.secondary }}></div> Đang học
                       </span>
                     )}
-                    <span
-                      style={{
-                        fontSize: "9px",
-                        color: "#10b981",
-                        opacity: 0.7,
-                      }}
-                    >
+                    <span style={{ fontSize: "9px", color: "#10b981", opacity: 0.7 }}>
                       ● Hoạt động
                     </span>
                   </div>
                 </td>
-
-                {/* 6. THAO TÁC */}
                 <td style={{ padding: "12px 15px" }}>
                   <div style={{ display: "flex", gap: "10px" }}>
-                    {/* NÚT XEM CHI TIẾT */}
                     <button
                       onClick={() => handleViewDetail(u)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: colors.primary,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        fontSize: "11px",
-                      }}
+                      style={{ background: "none", border: "none", color: colors.primary, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", transition: "0.2s" }}
+                      onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.2)"}
+                      onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
                     >
                       <Search size={14} /> Chi tiết
                     </button>
-
-                    {/* NÚT KHÓA/MỞ TÀI KHOẢN */}
                     <button
                       onClick={() => handleToggleLock(u.id)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: lockedUsers.includes(u.id)
-                          ? "#10b981"
-                          : "#f43f5e",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        fontSize: "11px",
-                      }}
+                      style={{ background: "none", border: "none", color: lockedUsers.includes(u.id) ? "#10b981" : "#f43f5e", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", transition: "0.2s" }}
+                      onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.2)"}
+                      onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
                     >
                       {lockedUsers.includes(u.id) ? (
-                        <>
-                          <Unlock size={14} /> Mở khóa
-                        </>
+                        <><Unlock size={14} /> Mở khóa</>
                       ) : (
-                        <>
-                          <Lock size={14} /> Khóa TK
-                        </>
+                        <><Lock size={14} /> Khóa TK</>
                       )}
                     </button>
                   </div>
@@ -602,11 +447,13 @@ export function AdminReport() {
             left: 0,
             width: "100%",
             height: "100%",
-            backgroundColor: "rgba(0,0,0,0.8)",
+            backgroundColor: isDark ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.8)", // Nền kính mờ đổi theo theme
+            backdropFilter: "blur(5px)",
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
             zIndex: 1000,
+            transition: "all 0.3s ease",
           }}
         >
           <div
@@ -617,46 +464,26 @@ export function AdminReport() {
               width: "500px",
               border: `1px solid ${colors.primary}`,
               position: "relative",
+              boxShadow: `0 10px 40px ${colors.primary}33`,
             }}
           >
             <button
               onClick={() => setIsModalOpen(false)}
-              style={{
-                position: "absolute",
-                right: "20px",
-                top: "20px",
-                background: "none",
-                border: "none",
-                color: "#fff",
-                cursor: "pointer",
-                fontSize: "20px",
-              }}
+              style={{ position: "absolute", right: "20px", top: "20px", background: "none", border: "none", color: colors.muted, cursor: "pointer", fontSize: "20px", transition: "0.2s" }}
+              onMouseEnter={(e) => e.currentTarget.style.color = "#ef4444"}
+              onMouseLeave={(e) => e.currentTarget.style.color = colors.muted}
             >
               ×
             </button>
 
-            <h2
-              style={{
-                color: colors.primary,
-                marginBottom: "20px",
-                borderBottom: `1px solid ${colors.border}`,
-                paddingBottom: "10px",
-              }}
-            >
+            <h2 style={{ color: colors.primary, marginBottom: "20px", borderBottom: `1px solid ${colors.border}`, paddingBottom: "10px" }}>
               Hồ Sơ Học Viên
             </h2>
 
-            <div style={{ display: "grid", gap: "15px", fontSize: "14px" }}>
-              <p>
-                <strong>Họ tên:</strong> {selectedUser.name}
-              </p>
-              <p>
-                <strong>Email:</strong> {selectedUser.email}
-              </p>
-              <p>
-                <strong>Cấp độ:</strong> Level {selectedUser.level} (
-                {selectedUser.xp} XP)
-              </p>
+            <div style={{ display: "grid", gap: "15px", fontSize: "14px", color: colors.text }}>
+              <p><strong>Họ tên:</strong> {selectedUser.name}</p>
+              <p><strong>Email:</strong> {selectedUser.email}</p>
+              <p><strong>Cấp độ:</strong> Level {selectedUser.level} ({selectedUser.xp} XP)</p>
 
               <div style={{ marginTop: "10px" }}>
                 <strong style={{ color: colors.primary }}>
@@ -675,10 +502,9 @@ export function AdminReport() {
                 <strong style={{ color: colors.secondary }}>
                   Khóa học đang học:
                 </strong>
-                <ul style={{ margin: "5px 0", color: "#a855f7" }}>
+                <ul style={{ margin: "5px 0", color: colors.secondary }}>
                   <li>
-                    {selectedUser.total_courses - selectedUser.completed_courses >
-                    0
+                    {selectedUser.total_courses - selectedUser.completed_courses > 0
                       ? "Đang theo dõi các bài học mới"
                       : "Trống"}
                   </li>
@@ -688,16 +514,9 @@ export function AdminReport() {
 
             <button
               onClick={() => setIsModalOpen(false)}
-              style={{
-                marginTop: "20px",
-                width: "100%",
-                padding: "10px",
-                backgroundColor: colors.primary,
-                border: "none",
-                borderRadius: "8px",
-                fontWeight: "bold",
-                cursor: "pointer",
-              }}
+              style={{ marginTop: "20px", width: "100%", padding: "12px", backgroundColor: colors.primary, color: isDark ? "#020617" : "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
+              onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.1)"}
+              onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
             >
               ĐÓNG
             </button>

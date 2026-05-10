@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext'; // <-- 1. IMPORT THEME
 import {
   Mic,
   MicOff,
@@ -33,6 +34,11 @@ interface Answer {
 
 export function MockInterview() {
   const { user } = useAuth();
+  
+  // 2. LẤY MÀU TỪ HỆ THỐNG
+  const { theme, colors } = useTheme();
+  const isDark = theme === 'dark';
+
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [isInterviewActive, setIsInterviewActive] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -41,16 +47,7 @@ export function MockInterview() {
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [interviewCompleted, setInterviewCompleted] = useState(false);
 
-  // --- HỆ THỐNG MÀU HUD (Đã thêm màu Error để fix lỗi báo đỏ) ---
-  const colors = {
-    bg: '#020617',
-    card: '#0f172a',
-    primary: '#22d3ee', // Cyan
-    secondary: '#a855f7', // Purple
-    text: '#d1d5db',
-    border: 'rgba(168, 85, 247, 0.2)',
-    error: '#ef4444' // Màu đỏ cho lỗi và khi ghi âm
-  };
+  const errorColor = '#ef4444'; // Giữ màu đỏ cho lỗi/ghi âm
 
   const roles = [
     {
@@ -261,34 +258,41 @@ export function MockInterview() {
 
   if (interviewCompleted) {
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: colors.bg, padding: '40px', fontFamily: 'monospace', color: colors.text }}>
+      <div style={{ minHeight: '100vh', backgroundColor: colors.bg, padding: '40px', fontFamily: 'monospace', color: colors.text, transition: 'all 0.3s ease' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-            <div style={{ width: '80px', height: '80px', backgroundColor: 'rgba(34, 211, 238, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: `1px solid ${colors.primary}` }}>
+            <div style={{ width: '80px', height: '80px', backgroundColor: `${colors.primary}15`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: `1px solid ${colors.primary}` }}>
               <CheckCircle2 size={40} color={colors.primary} />
             </div>
-            <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#fff' }}>HOÀN THÀNH PHỎNG VẤN</h2>
+            <h2 style={{ fontSize: '24px', fontWeight: 900, color: colors.text }}>HOÀN THÀNH PHỎNG VẤN</h2>
           </div>
 
-          <div style={{ backgroundColor: colors.card, border: `2px solid ${colors.primary}`, borderRadius: '24px', padding: '40px', textAlign: 'center', marginBottom: '32px' }}>
+          <div style={{ backgroundColor: colors.card, border: `2px solid ${colors.primary}`, borderRadius: '24px', padding: '40px', textAlign: 'center', marginBottom: '32px', boxShadow: isDark ? 'none' : `0 10px 30px ${colors.primary}22` }}>
             <p style={{ fontSize: '12px', fontWeight: 'bold', color: colors.primary, marginBottom: '8px' }}>DIỂM TRUNG BÌNH</p>
-            <p style={{ fontSize: '48px', fontWeight: 900, margin: 0, color: '#fff' }}>{averageRating.toFixed(1)}/5.0</p>
+            <p style={{ fontSize: '48px', fontWeight: 900, margin: 0, color: colors.text }}>{averageRating.toFixed(1)}/5.0</p>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {answers.map((ans, idx) => (
               <div key={idx} style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '16px', padding: '24px' }}>
                 <h4 style={{ color: colors.primary, marginBottom: '12px' }}>Câu {idx + 1}: {ans.question}</h4>
-                <p style={{ fontSize: '13px', fontStyle: 'italic', marginBottom: '16px', color: '#94a3b8' }}>"{ans.answer}"</p>
-                <div style={{ padding: '12px', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <p style={{ fontSize: '13px', fontStyle: 'italic', marginBottom: '16px', color: colors.muted }}>"{ans.answer}"</p>
+                <div style={{ padding: '12px', backgroundColor: colors.inputBg, borderRadius: '8px', border: `1px solid ${colors.border}` }}>
                   <p style={{ fontSize: '11px', fontWeight: 'bold', color: colors.secondary }}>NHẬN XÉT:</p>
-                  <p style={{ fontSize: '13px' }}>{ans.feedback}</p>
+                  <p style={{ fontSize: '13px', color: colors.text }}>{ans.feedback}</p>
                 </div>
               </div>
             ))}
           </div>
           
-          <button onClick={handleRestart} style={{ width: '100%', padding: '16px', borderRadius: '12px', border: `1px solid ${colors.primary}`, backgroundColor: colors.card, color: '#fff', fontWeight: 900, cursor: 'pointer', marginTop: '32px' }}>LUYỆN TẬP LẠI</button>
+          <button 
+            onClick={handleRestart} 
+            style={{ width: '100%', padding: '16px', borderRadius: '12px', border: `1px solid ${colors.primary}`, backgroundColor: colors.card, color: colors.text, fontWeight: 900, cursor: 'pointer', marginTop: '32px', transition: '0.2s' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.primary; e.currentTarget.style.color = '#fff'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.card; e.currentTarget.style.color = colors.text; }}
+          >
+            LUYỆN TẬP LẠI
+          </button>
         </div>
       </div>
     );
@@ -296,19 +300,25 @@ export function MockInterview() {
 
   if (!isInterviewActive) {
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: colors.bg, padding: '40px', fontFamily: 'monospace', color: colors.text }}>
+      <div style={{ minHeight: '100vh', backgroundColor: colors.bg, padding: '40px', fontFamily: 'monospace', color: colors.text, transition: 'all 0.3s ease' }}>
         <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
           <div style={{ borderLeft: `4px solid ${colors.primary}`, paddingLeft: '20px', marginBottom: '40px' }}>
-            <h1 style={{ fontSize: '30px', fontWeight: 900, color: '#fff' }}>MOCK <span style={{ color: colors.primary }}>INTERVIEW</span></h1>
-            <p style={{ color: '#475569', fontSize: '12px' }}>HỆ THỐNG GIẢ LẬP PHỎNG VẤN V1.0</p>
+            <h1 style={{ fontSize: '30px', fontWeight: 900, color: colors.text }}>MOCK <span style={{ color: colors.primary }}>INTERVIEW</span></h1>
+            <p style={{ color: colors.muted, fontSize: '12px' }}>HỆ THỐNG GIẢ LẬP PHỎNG VẤN V1.0</p>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
             {roles.map((role) => (
-              <button key={role.id} onClick={() => handleStartInterview(role.id)} style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '20px', padding: '32px', textAlign: 'left', cursor: 'pointer' }}>
+              <button 
+                key={role.id} 
+                onClick={() => handleStartInterview(role.id)} 
+                style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '20px', padding: '32px', textAlign: 'left', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: isDark ? 'none' : '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.borderColor = colors.primary; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = colors.border; }}
+              >
                 <div style={{ fontSize: '40px', marginBottom: '16px' }}>{role.icon}</div>
-                <h3 style={{ color: '#fff', fontSize: '18px', fontWeight: 'bold' }}>{role.name}</h3>
-                <p style={{ fontSize: '12px', color: '#64748b', margin: '8px 0 20px' }}>{role.description}</p>
+                <h3 style={{ color: colors.text, fontSize: '18px', fontWeight: 'bold' }}>{role.name}</h3>
+                <p style={{ fontSize: '12px', color: colors.muted, margin: '8px 0 20px' }}>{role.description}</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colors.primary, fontSize: '11px', fontWeight: 900 }}>BẮT ĐẦU <Play size={14} /></div>
               </button>
             ))}
@@ -319,41 +329,79 @@ export function MockInterview() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: colors.bg, padding: '40px', fontFamily: 'monospace', color: colors.text }}>
+    <div style={{ minHeight: '100vh', backgroundColor: colors.bg, padding: '40px', fontFamily: 'monospace', color: colors.text, transition: 'all 0.3s ease' }}>
       <div style={{ maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ marginBottom: '32px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: isRecording ? colors.error : colors.primary, fontWeight: 'bold', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: isRecording ? errorColor : colors.primary, fontWeight: 'bold', marginBottom: '8px' }}>
             <span>CÂU {currentQuestionIndex + 1} / {currentQuestions.length}</span>
             <span>{isRecording ? '• RECORDING...' : 'SYSTEM READY'}</span>
           </div>
-          <div style={{ height: '4px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+          <div style={{ height: '4px', backgroundColor: colors.inputBg, borderRadius: '2px', overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${((currentQuestionIndex + 1) / currentQuestions.length) * 100}%`, backgroundColor: colors.primary, boxShadow: `0 0 10px ${colors.primary}` }} />
           </div>
         </div>
 
-        <div style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '24px', padding: '40px' }}>
+        <div style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '24px', padding: '40px', boxShadow: isDark ? 'none' : '0 10px 30px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-            <span style={{ padding: '4px 12px', borderRadius: '4px', backgroundColor: 'rgba(34, 211, 238, 0.1)', color: colors.primary, fontSize: '10px', fontWeight: 'bold' }}>{currentQuestion?.category.toUpperCase()}</span>
+            <span style={{ padding: '4px 12px', borderRadius: '4px', backgroundColor: `${colors.primary}15`, color: colors.primary, fontSize: '10px', fontWeight: 'bold' }}>{currentQuestion?.category.toUpperCase()}</span>
           </div>
 
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff', marginBottom: '24px', lineHeight: '1.5' }}>{currentQuestion?.question}</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: colors.text, marginBottom: '24px', lineHeight: '1.5' }}>{currentQuestion?.question}</h2>
 
-          <div style={{ backgroundColor: 'rgba(250, 204, 21, 0.03)', border: '1px solid rgba(250, 204, 21, 0.1)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
-            <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#facc15', marginBottom: '4px' }}>GỢI Ý:</p>
-            <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#a1a1aa' }}>
+          <div style={{ backgroundColor: isDark ? 'rgba(250, 204, 21, 0.05)' : '#fefce8', border: `1px solid ${isDark ? 'rgba(250, 204, 21, 0.2)' : '#fef08a'}`, borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+            <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#eab308', marginBottom: '4px' }}>GỢI Ý:</p>
+            <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: isDark ? '#a1a1aa' : '#713f12' }}>
               {currentQuestion?.hints.map((hint, i) => <li key={i}>{hint}</li>)}
             </ul>
           </div>
 
-          <textarea value={currentAnswer} onChange={(e) => setCurrentAnswer(e.target.value)} placeholder="Nhập câu trả lời..." style={{ width: '100%', backgroundColor: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', color: '#fff', outline: 'none', resize: 'none', minHeight: '150px', marginBottom: '24px' }} />
+          <textarea 
+            value={currentAnswer} 
+            onChange={(e) => setCurrentAnswer(e.target.value)} 
+            placeholder="Nhập câu trả lời..." 
+            style={{ 
+              width: '100%', 
+              backgroundColor: colors.inputBg, 
+              border: `1px solid ${colors.inputBorder}`, 
+              borderRadius: '12px', 
+              padding: '16px', 
+              color: colors.text, 
+              outline: 'none', 
+              resize: 'none', 
+              minHeight: '150px', 
+              marginBottom: '24px',
+              fontFamily: 'monospace',
+              transition: 'all 0.3s ease'
+            }} 
+            onFocus={(e) => e.currentTarget.style.borderColor = colors.primary}
+            onBlur={(e) => e.currentTarget.style.borderColor = colors.inputBorder}
+          />
 
           <div style={{ display: 'flex', gap: '16px' }}>
-            <button onClick={toggleRecording} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: isRecording ? 'rgba(239, 68, 68, 0.1)' : 'transparent', color: isRecording ? colors.error : '#fff', cursor: 'pointer' }}>
+            <button 
+              onClick={toggleRecording} 
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '10px', border: `1px solid ${isRecording ? errorColor : colors.border}`, backgroundColor: isRecording ? `${errorColor}15` : 'transparent', color: isRecording ? errorColor : colors.text, cursor: 'pointer', transition: '0.2s' }}
+              onMouseEnter={(e) => { if(!isRecording) e.currentTarget.style.backgroundColor = colors.inputBg }}
+              onMouseLeave={(e) => { if(!isRecording) e.currentTarget.style.backgroundColor = 'transparent' }}
+            >
               {isRecording ? <MicOff size={18} /> : <Mic size={18} />} {isRecording ? 'STOP' : 'REC'}
             </button>
             <div style={{ flex: 1 }} />
-            <button onClick={handleRestart} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', backgroundColor: 'transparent', color: '#475569', fontWeight: 'bold', cursor: 'pointer' }}>ABORT</button>
-            <button onClick={handleSubmitAnswer} disabled={!currentAnswer.trim()} style={{ padding: '10px 24px', borderRadius: '10px', border: 'none', backgroundColor: colors.primary, color: colors.bg, fontWeight: 900, cursor: 'pointer', opacity: !currentAnswer.trim() ? 0.3 : 1 }}>
+            <button 
+              onClick={handleRestart} 
+              style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', backgroundColor: 'transparent', color: colors.muted, fontWeight: 'bold', cursor: 'pointer', transition: '0.2s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = colors.text }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = colors.muted }}
+            >
+              ABORT
+            </button>
+            <button 
+              onClick={handleSubmitAnswer} 
+              disabled={!currentAnswer.trim()} 
+              style={{ padding: '10px 24px', borderRadius: '10px', border: 'none', backgroundColor: colors.primary, color: '#fff', fontWeight: 900, cursor: 'pointer', opacity: !currentAnswer.trim() ? 0.3 : 1, transition: '0.2s' }}
+              onMouseEnter={(e) => { if(currentAnswer.trim()) e.currentTarget.style.filter = 'brightness(1.1)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.filter = 'brightness(1)' }}
+            >
               {currentQuestionIndex < currentQuestions.length - 1 ? 'NEXT' : 'FINISH'}
             </button>
           </div>
