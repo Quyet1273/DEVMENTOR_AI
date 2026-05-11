@@ -1,17 +1,24 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../../lib/supabase"; 
+import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
-import { 
-  Loader2, Play, Star, Users, PlayCircle, 
-  BookOpen, Code, Video, ExternalLink 
+import {
+  Loader2,
+  Play,
+  Star,
+  Users,
+  PlayCircle,
+  BookOpen,
+  Code,
+  Video,
+  ExternalLink,
 } from "lucide-react";
 
 export function MyLearning() {
   const { user } = useAuth();
   const { colors, theme } = useTheme(); // Lấy theme thay vì isDark
-const isDark = theme === "dark";
+  const isDark = theme === "dark";
   const navigate = useNavigate();
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,14 +35,14 @@ const isDark = theme === "dark";
           .eq("user_id", user.id);
 
         if (error) throw error;
-        
+
         // Map dữ liệu đơn giản như bản 1 để đảm bảo hiện khóa học
         if (data) {
           const formatted = data
             .filter((item: any) => item.courses) // Chỉ lấy nếu có dữ liệu course đi kèm
             .map((item: any) => ({
               ...item.courses,
-              progress: item.progress_percent || 0 // Lấy tiến độ từ bảng enrollment
+              progress: item.progress || 0, // Lấy tiến độ từ bảng enrollment
             }));
           setEnrolledCourses(formatted);
         }
@@ -51,105 +58,140 @@ const isDark = theme === "dark";
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center" style={{ backgroundColor: colors.bg }}>
-        <Loader2 className="animate-spin" style={{ color: colors.primary }} size={40} />
+      <div
+        className="h-screen flex items-center justify-center"
+        style={{ backgroundColor: colors.bg }}
+      >
+        <Loader2
+          className="animate-spin"
+          style={{ color: colors.primary }}
+          size={40}
+        />
       </div>
     );
   }
 
-  return (
+ return (
     <div className="p-8 min-h-screen" style={{ backgroundColor: colors.bg }}>
-      <header className="mb-10">
-        <h1 className="text-4xl font-black tracking-tighter uppercase" style={{ color: colors.primary }}>
-          KHÓA HỌC CỦA TÔI
-        </h1>
-        <p style={{ color: colors.muted }}>Tiếp tục hành trình DevMentor AI của ông nào!</p>
+      <header className="mb-16">
+        <h2 className="text-3xl font-black uppercase tracking-tighter" style={{ color: colors.primary }}>
+          Khóa học của tôi
+        </h2>
+        <p style={{ color: colors.muted }}>Tiếp tục hành trình chinh phục kiến thức của bạn.</p>
       </header>
 
       {enrolledCourses.length === 0 ? (
-        <div className="text-center py-20 rounded-[20px] border border-dashed" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
-          <p style={{ color: colors.muted }}>Ông chưa đăng ký khóa học nào. Qua trang Khóa học ngay đi!</p>
+        <div className="text-center py-20 border-2 border-dashed rounded-3xl" style={{ borderColor: colors.border }}>
+          <p style={{ color: colors.muted }}>Bạn chưa đăng ký khóa học nào.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {enrolledCourses.map((course) => (
             <div
               key={course.id}
+              className="rounded-xl overflow-hidden transition-all duration-300"
               style={{
                 backgroundColor: colors.card,
-                border: `1px solid ${colors.border}`,
-                borderRadius: '20px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                transition: 'all 0.3s ease',
-                position: 'relative',
-                overflow: 'hidden',
-                boxShadow: isDark ? 'none' : '0 4px 6px -1px rgba(0,0,0,0.05)'
+                border: `2px solid ${isDark ? colors.primary + "40" : colors.border}`,
+                display: "flex",
+                flexDirection: "column",
+                cursor: "pointer",
+                boxShadow: isDark ? "0 0 15px rgba(34, 211, 238, 0.1)" : "0 4px 12px rgba(0, 0, 0, 0.05)",
               }}
-              className="group hover:-translate-y-1"
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-8px) scale(1.01)";
+                e.currentTarget.style.boxShadow = isDark ? `0 0 30px ${colors.primary}50` : "0 15px 30px rgba(0, 0, 0, 0.1)";
+                e.currentTarget.style.borderColor = colors.primary;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0) scale(1)";
+                e.currentTarget.style.boxShadow = isDark ? "0 0 15px rgba(34, 211, 238, 0.1)" : "0 4px 12px rgba(0, 0, 0, 0.05)";
+                e.currentTarget.style.borderColor = isDark ? colors.primary + "40" : colors.border;
+              }}
             >
-              {/* HEADER: ICON & LEVEL */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: `${colors.primary}15`, border: `1px solid ${colors.primary}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <BookOpen size={24} color={colors.primary} />
-                </div>
-                <span style={{ fontSize: '9px', fontWeight: 900, padding: '4px 10px', borderRadius: '4px', border: `1px solid ${colors.primary}`, color: colors.primary, textTransform: 'uppercase' }}>
-                  {course.level || "Cơ bản"}
+              {/* 1. ẢNH THUMBNAIL */}
+              <div className="relative h-48" style={{ backgroundColor: colors.inputBg }}>
+                <img
+                  src={course.thumbnail}
+                  alt={course.title}
+                  className="w-full h-full object-cover"
+                />
+                <span
+                  className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-bold font-mono uppercase"
+                  style={{
+                    backgroundColor: colors.secondary,
+                    color: "#ffffff",
+                    boxShadow: `0 0 10px ${colors.secondary}80`,
+                  }}
+                >
+                  {course.level}
                 </span>
               </div>
 
-              {/* TITLE & DESCRIPTION */}
-              <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: colors.text, marginBottom: '12px', lineHeight: '1.4' }}>
-                {course.title}
-              </h3>
-              <p style={{ fontSize: '13px', color: colors.muted, lineHeight: '1.6', marginBottom: '20px', flex: 1 }} className="line-clamp-2">
-                {course.description}
-              </p>
-
-              {/* STATS & CATEGORY */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', fontSize: '10px', fontWeight: 'bold', color: colors.muted }}>
-                <span style={{ backgroundColor: colors.inputBg, padding: '4px 8px', borderRadius: '4px', border: `1px solid ${colors.border}` }}>
-                  #{course.category?.toUpperCase() || "PROGRAMMING"}
-                </span>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <span>⭐ 0</span>
-                  <span>👥 0</span>
+              {/* 2. NỘI DUNG THÔNG TIN */}
+              <div className="p-6 flex flex-col grow">
+                <div className="mb-3">
+                  <span
+                    className="text-[10px] font-bold px-2 py-1 rounded uppercase font-mono"
+                    style={{
+                      border: `1px solid ${colors.secondary}`,
+                      color: colors.secondary,
+                      backgroundColor: `${colors.secondary}15`,
+                    }}
+                  >
+                    {course.category}
+                  </span>
                 </div>
+
+                <h3
+                  className="text-lg mb-2 line-clamp-1 font-bold font-mono uppercase"
+                  style={{ color: colors.text }}
+                >
+                  {course.title}
+                </h3>
+
+                <p className="text-sm mb-4 line-clamp-2" style={{ color: colors.muted }}>
+                  {course.description}
+                </p>
+
+                {/* ICONS & THÔNG SỐ */}
+                <div className="flex items-center gap-4 text-xs mb-4 font-mono" style={{ color: colors.primary }}>
+                  <span className="flex items-center gap-1"><Star size={14} fill={colors.primary} /> {course.rating || 0}</span>
+                  <span className="flex items-center gap-1"><Users size={14} /> {course.students_enrolled || 0}</span>
+                  <span className="flex items-center gap-1"><PlayCircle size={14} /> {course.total_lessons || 0} BÀI</span>
+                </div>
+
+                {/* THANH TIẾN ĐỘ (PROGRESS) */}
+                <div className="mb-6">
+                  <div className="flex justify-between text-[10px] mb-1 font-bold uppercase" style={{ color: colors.muted }}>
+                    <span>Tiến độ học</span>
+                    <span>{course.progress}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-gray-500/20">
+                    <div 
+                      className="h-full rounded-full transition-all duration-500" 
+                      style={{ 
+                        width: `${course.progress}%`, 
+                        backgroundColor: '#10b981',
+                        boxShadow: '0 0 10px #10b98150'
+                      }} 
+                    />
+                  </div>
+                </div>
+
+                {/* 3. NÚT TIẾP TỤC HỌC */}
+                <button
+                  onClick={() => navigate(`/learning/${course.id}`)}
+                  className="w-full mt-auto py-3 rounded-lg font-bold flex items-center justify-center gap-2 uppercase font-mono transition-all"
+                  style={{
+                    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                    color: "#ffffff",
+                    boxShadow: "0 4px 15px rgba(16, 185, 129, 0.4)",
+                  }}
+                >
+                  <PlayCircle className="w-5 h-5" /> TIẾP TỤC HỌC
+                </button>
               </div>
-
-              {/* PROGRESS BAR (Thanh tiến độ thêm mới) */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontWeight: 900, color: colors.muted, marginBottom: '6px' }}>
-                  <span className="uppercase">Tiến độ học</span>
-                  <span style={{ color: colors.primary }}>{course.progress}%</span>
-                </div>
-                <div style={{ height: '6px', backgroundColor: colors.inputBg, borderRadius: '3px', overflow: 'hidden' }}>
-                  <div 
-                    style={{ 
-                      width: `${course.progress}%`, 
-                      height: '100%', 
-                      backgroundColor: colors.primary,
-                      transition: 'width 1s ease-in-out'
-                    }} 
-                  />
-                </div>
-              </div>
-
-              {/* ACTION BUTTON */}
-              <button
-                onClick={() => navigate(`/learning/${course.id}`)}
-                style={{
-                  width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
-                  background: `linear-gradient(to right, ${colors.primary}, ${colors.secondary || colors.primary})`,
-                  color: '#fff', fontWeight: 900, fontSize: '12px', textTransform: 'uppercase',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-                className="hover:brightness-110 active:scale-95"
-              >
-                Tiếp tục học <Play size={14} fill="currentColor" />
-              </button>
             </div>
           ))}
         </div>

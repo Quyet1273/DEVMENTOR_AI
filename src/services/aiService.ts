@@ -1,103 +1,40 @@
+
 import Groq from "groq-sdk";
 
-// Khởi tạo Groq
+// 1. Cấu hình Groq
 const groq = new Groq({
   apiKey: import.meta.env.VITE_GROQ_API_KEY,
   dangerouslyAllowBrowser: true,
 });
-export const aiService = {
-  /**
-   * 1. XỬ LÝ CHATBOX (Hàm cũ của ông)
-   */
-  getAIResponse: async (userPrompt: string, history: any[] = []) => {
-    try {
-      const messages = [
-        {
-          role: "system",
-          content: `Bạn là DevMentor AI - Trợ lý học lập trình thân thiện.
-          - Luôn gọi người dùng là 'Bạn học thân mến'.
-          - Trả lời bằng Markdown, bôi đậm các từ khóa quan trọng.
-          - Nếu có code, hãy để trong block code tương ứng.`,
-        },
-        ...history.map((m) => ({
-          role: m.role === "user" ? "user" : "assistant",
-          content: m.content,
-        })),
-        { role: "user", content: userPrompt },
-      ];
 
-      const response = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: messages as any,
-        temperature: 0.8,
-        max_tokens: 1024,
-      });
-
-      return response.choices[0]?.message?.content || "";
-    } catch (error) {
-      console.error("Lỗi AI Chat:", error);
-      return "Có lỗi rồi bạn học ơi, thử lại sau nhé!";
-    }
-  },
-
-  /**
-   * 2. SOẠN BÀI GIẢNG CHI TIẾT (Hàm mới để phục vụ Bulk Generate)
-   */
- generateLessonContent: async (lessonTitle: string, courseTitle: string) => {
+/**
+ * HÀM HỖ TRỢ GỌI API (Internal Helper)
+ */
+async function callGroq(systemPrompt: string, userPrompt: string, history: any[] = [], isJson: boolean = false) {
   try {
-    const prompt = `
-      Bạn là chuyên gia đào tạo lập trình. Hãy soạn bài giảng chi tiết.
-      Khóa học: ${courseTitle}
-      Bài học: ${lessonTitle}
-
-      YÊU CẦU BẮT BUỘC:
-      1. Trả về DUY NHẤT một đối tượng JSON hợp lệ.
-      2. KHÔNG được có văn bản thừa bên ngoài khối JSON.
-      3. Cấu trúc JSON phải chính xác như sau:
-      {
-        "content": "Nội dung bài giảng chi tiết bằng Markdown...",
-        "code_example": "Ví dụ code minh họa..."
-      }
-      4. Trong phần "content", hãy dùng các thẻ H2, H3, và các icon 💡, 🚀 để bài giảng sinh động.
-    `;
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...history.map((m) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.content,
+      })),
+      { role: "user", content: userPrompt },
+    ];
 
     const response = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
-      messages: [
-        { 
-          role: "system", 
-          content: "Bạn là một máy chủ trả về dữ liệu dưới dạng JSON thuần túy. Không giải thích, không chào hỏi." 
-        },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.3, // Giảm temperature xuống để AI ít "sáng tạo" lung tung làm hỏng JSON
-      response_format: { type: "json_object" }
+      messages: messages as any,
+      temperature: 0.7,
+      max_tokens: 2048,
+      response_format: isJson ? { type: "json_object" } : undefined,
     });
 
-    const resContent = response.choices[0]?.message?.content;
-    
-    if (!resContent) return null;
-
-    // Parse thử, nếu lỗi thì bắt lỗi để không làm sập app
-    try {
-      return JSON.parse(resContent);
-    } catch (parseError) {
-      console.error("Lỗi parse JSON từ AI:", resContent);
-      return null;
-    }
+    return response.choices[0]?.message?.content || "";
   } catch (error) {
-    console.error("Lỗi gọi API Groq:", error);
-    return null;
+    console.error("Lỗi AI Service:", error);
+    return isJson ? "{}" : "Hệ thống AI đang bận, bạn đợi xíu nhé!";
   }
 }
-};
-
-export default aiService;
-
-/**
- * 1. XỬ LÝ CHATBOX
- * Đã chuyển sang model Llama 3 và cập nhật biến gọi chuẩn
- */
 export const getAIResponse = async (userPrompt: string, history: any[]) => {
   try {
     const messages = [
@@ -137,94 +74,109 @@ export const getAIResponse = async (userPrompt: string, history: any[]) => {
   }
 };
 
+
 /**
- * 2. XỬ LÝ TẠO LỘ TRÌNH (JSON MODE)
+ * AI SERVICE - BỘ NÃO CỦA ỨNG DỤNG
  */
-export const generateAIRoadmap = async (
-  courseTitle: string,
-  userContext: any,
-  lessons: any[],
-) => {
-  try {
-    const simplifiedLessons = lessons.map((l) => ({
-      id: l.id,
-      title: l.title,
-      order_num: l.order_num,
-    }));
+export const aiService = {
+  
+  /**
+   * 1. GIA SƯ ĐỒNG HÀNH (Socratic Tutor)
+   * Sử dụng: Trong Sidebar trang học tập.
+   * Logic: Đọc ai_note và lesson content để giải đáp gợi mở.
+   */
+  getChatResponse: async (params: {
+    userPrompt: string,
+    lessonTitle: string,
+    lessonContent: string,
+    aiNote: string,
+    history: any[]
+  }) => {
+    const systemPrompt = `
+      Bạn là DevMentor AI - Trợ lý học lập trình thông minh.
+      NGỮ CẢNH BÀI HỌC HIỆN TẠI:
+      - Bài học: ${params.lessonTitle}
+      - Nội dung: ${params.lessonContent}
+      - Ghi chú từ giảng viên (AI Note): ${params.aiNote}
 
-    const prompt = `
-      Nhiệm vụ: Bạn là chuyên gia sư phạm. Hãy chia danh sách bài học sau thành 3-5 chặng (milestones).
-      Khóa học: ${courseTitle}
-      Học viên: ${userContext?.full_name} , Trình độ: ${userContext?.current_level || "Beginner"}
-      Danh sách bài học: ${JSON.stringify(simplifiedLessons)}
+      QUY TẮC:
+      1. Socratic Method: Nếu sinh viên hỏi code, hãy gợi ý logic thay vì cho đáp án ngay.
+      2. Tập trung: Chỉ trả lời kiến thức liên quan bài học hoặc lập trình.
+      3. Thân thiện: Gọi sinh viên là "Bạn học thân mến".
+      4. Markdown: Trình bày code và từ khóa rõ ràng.
+    `;
+    return await callGroq(systemPrompt, params.userPrompt, params.history);
+  },
 
-      YÊU CẦU TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
+  /**
+   * 2. TÓM TẮT BÀI HỌC (Smart Summary)
+   * Sử dụng: Giúp sinh viên ôn tập nhanh ý chính.
+   */
+  summarizeLesson: async (lessonContent: string) => {
+    const systemPrompt = `
+      Bạn là chuyên gia tóm tắt bài giảng. 
+      Nhiệm vụ: Trích xuất 3-5 ý chính quan trọng nhất từ nội dung bài học.
+      Yêu cầu: Ngắn gọn, súc tích, định dạng gạch đầu dòng Markdown.
+    `;
+    return await callGroq(systemPrompt, lessonContent, []);
+  },
+
+  /**
+   * 3. TẠO CÂU HỎI LUYỆN TẬP (Quiz Generator)
+   * Sử dụng: Tự động tạo bài tập dựa trên bài vừa học.
+   */
+  generateQuiz: async (lessonContent: string) => {
+    const systemPrompt = `
+      Bạn là chuyên gia khảo thí. Dựa trên nội dung bài học, hãy tạo 1 câu hỏi trắc nghiệm.
+      Trả về định dạng JSON duy nhất như sau:
       {
-        "ai_summary": "Lời chào và đánh giá lộ trình",
-        "milestones": [
-          {
-            "title": "Tên chặng",
-            "description": "Mục tiêu chặng",
-            "order_index": 1,
-            "lessons": [
-              { 
-                "lesson_id": ID_thực_tế, 
-                "ai_note": "Lời khuyên cho bài này" 
-              }
-            ]
-          }
-        ]
+        "question": "Câu hỏi là gì?",
+        "options": ["A", "B", "C", "D"],
+        "answer": "Đáp án đúng",
+        "explanation": "Giải thích tại sao đúng"
       }
     `;
+    const response = await callGroq(systemPrompt, lessonContent, [], true);
+    return JSON.parse(response);
+  },
 
-    const response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
-      // Groq hỗ trợ JSON Mode rất tốt
-      response_format: { type: "json_object" },
-      temperature: 0.3,
-    });
-
-    const content = response.choices[0]?.message?.content || "{}";
-    return JSON.parse(content);
-  } catch (error) {
-    console.error("Lỗi tạo Roadmap Groq:", error);
-    return {
-      ai_summary: "AI đang bận, Bạn dùng lộ trình mặc định nhé!",
-      milestones: [],
-    };
-  }
-};
-/**
- * 3. TẠO NỘI DUNG BÀI HỌC TỰ ĐỘNG
- */
-export const generateLessonContent = async (
-  lessonTitle: string,
-  courseTitle: string,
-) => {
-  try {
-    const prompt = `
-      Bạn là giảng viên chuyên nghiệp. Hãy viết nội dung chi tiết cho bài học: "${lessonTitle}" 
-      thuộc khóa học: "${courseTitle}".
-      
-      Yêu cầu trả về định dạng JSON duy nhất:
-      {
-        "content": "Nội dung bài học bằng Markdown (có lý thuyết, giải thích chi tiết)",
-        "code_example": "Ví dụ code minh họa chi tiết (nếu có)",
-        "summary": "Tóm tắt bài học trong 3 câu"
-      }
+  /**
+   * 4. LỜI CHÀO CHỦ ĐỘNG (Dashboard Greeting)
+   * Sử dụng: Hiển thị ở trang chủ để khích lệ sinh viên.
+   */
+  getDashboardGreeting: async (userName: string, progress: number, lastLesson: string) => {
+    const systemPrompt = `
+      Bạn là người bạn đồng hành cổ vũ sinh viên.
+      Thông tin: Sinh viên ${userName}, đã hoàn thành ${progress}% lộ trình, bài cuối là "${lastLesson}".
+      Nhiệm vụ: Viết 1 câu chào mừng cực kỳ ngắn gọn (dưới 30 từ), mang tính động viên hoặc hài hước.
     `;
+    return await callGroq(systemPrompt, "Hãy chào mình!", []);
+  },
 
-    const response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-      temperature: 0.5,
-    });
-
-    return JSON.parse(response.choices[0]?.message?.content || "{}");
-  } catch (error) {
-    console.error("Lỗi tạo nội dung bài học:", error);
-    return null;
-  }
+  /**
+   * 5. GỢI Ý KHI BẾ TẮC (Stuck Intervention)
+   * Sử dụng: Khi sinh viên làm sai Quiz nhiều lần hoặc ở lại bài quá lâu.
+   */
+  getStuckHint: async (lessonTitle: string, aiNote: string) => {
+    const systemPrompt = `
+      Sinh viên đang gặp khó khăn ở bài "${lessonTitle}".
+      Ghi chú hỗ trợ: ${aiNote}
+      Nhiệm vụ: Đưa ra 1 lời khuyên hoặc 1 mẹo nhỏ để họ vượt qua khó khăn này.
+    `;
+    return await callGroq(systemPrompt, "Mình đang bí quá, giúp mình với!", []);
+  },
+  /**
+   * 6. LỜI KHUYÊN MỞ ĐẦU BÀI HỌC (Lesson Intro Advice)
+   * Sử dụng: Hiển thị trong MentorAdvice Box ngay khi vào trang học.
+   */
+  getLessonIntro: async (userName: string, lessonTitle: string, userLevel: number) => {
+    const systemPrompt = `
+      Bạn là DevMentor AI. 
+      Nhiệm vụ: Đưa ra 1 lời khuyên ngắn gọn (dưới 25 từ) để khích lệ sinh viên bắt đầu bài học.
+      Thông tin: Sinh viên ${userName}, cấp độ ${userLevel}, bài học: "${lessonTitle}".
+      Yêu cầu: Câu văn mang tính "đồng hành", chuyên nghiệp và liên quan đến IT.
+    `;
+    return await callGroq(systemPrompt, "Hãy cho mình một lời khuyên để bắt đầu bài học này!", []);
+  },
+  
 };

@@ -6,8 +6,9 @@ import { useLanguage } from "../context/LanguageContext";
 import { translations } from "../data/translations";
 import { lessonService } from "../services/lessonService";
 import { QuizComponent } from "./pages/QuizComponent";
-import { generateLessonContent } from "../services/aiService";
+import { aiService } from "../services/aiService";
 import { Lesson, LessonSummary } from "../models/learning";
+import MentorAdvice from "./pages/MentorAdvice";
 import Editor from "@monaco-editor/react";
 import { marked } from "marked";
 import {
@@ -43,11 +44,44 @@ export function Learning() {
   const [allLessons, setAllLessons] = useState<LessonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showQuiz, setShowQuiz] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // --- STATE PHỤC VỤ THỰC HÀNH & KIỂM TRA (FIX LỖI CANNOT FIND NAME) ---
   const [isPracticeMode, setIsPracticeMode] = useState(false);
   const [editorCode, setEditorCode] = useState("");
   const [checking, setChecking] = useState(false);
+  // AI help
+  const [advice, setAdvice] = useState<string>("Đang kết nối với Mentor...");
+
+  useEffect(() => {
+    const fetchAdvice = async () => {
+      // Nếu chưa load kịp user thì để là "Bạn học"
+      const displayName = user?.name || user?.name || "Bạn học";
+
+      // 2. Lấy tiêu đề bài học
+      const lessonTitle = lesson?.title || "bài học mới";
+
+      // 3. Lấy level thật
+      const userLevel = user?.level || 3;
+
+      if (lesson) {
+        // Chỉ gọi AI khi đã load xong dữ liệu bài học
+        setAdvice("Mentor đang xem bài học..."); // Hiệu ứng chờ cho xịn
+        try {
+          const res = await aiService.getLessonIntro(
+            displayName,
+            lessonTitle,
+            userLevel,
+          );
+          setAdvice(res);
+        } catch (error) {
+          setAdvice("Chúc bạn có một buổi học hiệu quả nhé!");
+        }
+      }
+    };
+
+    fetchAdvice();
+  }, [lesson, user]); // Quan trọng: Chạy lại mỗi khi 'lesson' thay đổi (khi bạn chuyển bài)
 
   // --- HÀM KIỂM TRA CODE BẰNG AI (FIX LỖI CANNOT FIND NAME) ---
   const handleCheckCode = async () => {
@@ -78,7 +112,7 @@ export function Learning() {
     }
   };
 
-  // --- LOGIC KHỞI TẠO BÀI HỌC ---
+  // --- LOGIC KHỞI TẠO BÀI HỌC ---?
   useEffect(() => {
     const init = async () => {
       if (!user || !courseId) return;
@@ -109,37 +143,6 @@ export function Learning() {
         const isContentEmpty =
           !lessonData?.content || lessonData.content.trim().length < 10;
 
-        if (isContentEmpty && lessonData) {
-          console.log("🤖 Nội dung trống! Đang nhờ AI soạn bài...");
-          toast.info(
-            language === "vi"
-              ? "🤖 Mentor AI đang soạn bài giảng..."
-              : "🤖 AI is drafting your lesson...",
-          );
-
-          const aiGenerated = await generateLessonContent(
-            lessonData.title,
-            courseData.title,
-          );
-
-          if (aiGenerated) {
-            console.log("✅ AI đã soạn xong, đang lưu vào DB...");
-            await lessonService.updateLessonContent(
-              targetLessonId,
-              aiGenerated.content_markdown,
-              aiGenerated.code_snippet,
-            );
-
-            lessonData.content = aiGenerated.content_markdown;
-            lessonData.code_example = aiGenerated.code_snippet;
-            toast.success(
-              language === "vi"
-                ? "✨ Bài giảng đã sẵn sàng!"
-                : "✨ Lesson is ready!",
-            );
-          }
-        }
-
         // Cập nhật các thông tin bài học
         setLesson(lessonData);
         setCourseTitle(courseData.title);
@@ -166,23 +169,6 @@ export function Learning() {
     setLoading(true);
     try {
       let data = await lessonService.getLessonContent(lessonId);
-
-      // Nếu bài học trống -> Gọi AI soạn bài
-      if (!data?.content || data.content.trim().length < 10) {
-        toast.info("🤖 Mentor AI đang soạn bài...");
-        const aiResult = await generateLessonContent(data.title, courseTitle);
-
-        if (aiResult) {
-          await lessonService.updateLessonContent(
-            lessonId,
-            aiResult.content_markdown,
-            aiResult.code_snippet,
-          );
-          data.content = aiResult.content_markdown;
-          data.code_example = aiResult.code_snippet;
-        }
-      }
-
       setLesson(data);
       // Cập nhật code mẫu cho bài mới và quay về tab lý thuyết
       setEditorCode(data?.code_example || "");
@@ -264,12 +250,12 @@ export function Learning() {
                 <ChevronLeft size={24} />
               </button>
               <div>
-                <h1
+                <h2
                   className="text-2xl md:text-3xl leading-none font-bold tracking-tight"
                   style={{ color: colors.primary }}
                 >
                   {courseTitle}
-                </h1>
+                </h2>
               </div>
             </div>
 
@@ -315,67 +301,54 @@ export function Learning() {
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar danh sách bài học */}
           <aside
-            className="w-80 flex flex-col shadow-sm overflow-hidden hidden lg:flex transition-colors"
+            className={`flex flex-col shadow-sm transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-64" : "w-0 opacity-0"}`}
             style={{
               backgroundColor: colors.card,
-              borderRight: `1px solid ${colors.divider}`,
+              borderRight: isSidebarOpen
+                ? `1px solid ${colors.divider}`
+                : "none",
+              position: "relative", // Để định vị nút đóng mở nếu cần
             }}
           >
+            {/* Header của Sidebar - Chữ bé lại */}
             <div
-              className="p-6 flex items-center justify-between"
-              style={{
-                borderBottom: `1px solid ${colors.divider}`,
-                backgroundColor: colors.inputBg,
-              }}
+              className="p-4 flex items-center justify-between"
+              style={{ backgroundColor: colors.inputBg }}
             >
               <span
-                className="font-black text-[11px] uppercase tracking-tighter flex items-center gap-2"
+                className="font-black text-[10px] uppercase tracking-widest flex items-center gap-2"
                 style={{ color: colors.muted }}
               >
-                <List size={14} /> {tl.lessonList}
+                <List size={12} /> {tl.lessonList}
               </span>
-              <span
-                className="text-[10px] px-2 py-0.5 rounded font-bold"
-                style={{ backgroundColor: colors.card, color: colors.muted }}
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                className="lg:hidden" // Hiện nút X trên mobile hoặc thích thì để cả desktop
               >
-                {allLessons.length} {tl.lessons}
-              </span>
+                <ChevronLeft size={16} />
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3 space-y-1 relative devmentor-scrollbar">
-              <style>{`
-                .my-lesson-item:hover:not(.is-active) {
-                  background-color: ${colors.primary}15 !important; 
-                  color: ${colors.primary} !important; 
-                }
-                .my-lesson-item:hover:not(.is-active) .my-lesson-num {
-                  background-color: transparent !important; 
-                  color: ${colors.primary} !important; 
-                }
-              `}</style>
-
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 devmentor-scrollbar">
               {allLessons.map((l) => {
                 const isActive = lesson.id === l.id;
                 return (
                   <button
                     key={l.id}
                     onClick={() => fetchAndGenerateLesson(l.id, courseTitle)}
-                    className={`my-lesson-item w-full flex items-center gap-3 p-4 rounded-2xl text-left transition-all duration-200 ${isActive ? "is-active shadow-lg" : ""}`}
+                    className={`w-full flex items-center gap-2 p-3 rounded-xl text-left transition-all ${isActive ? "shadow-md" : ""}`}
                     style={
                       isActive
-                        ? {
-                            backgroundColor: colors.primary,
-                            color: "#ffffff",
-                            transform: "scale(1.02)",
-                          }
+                        ? { backgroundColor: colors.primary, color: "#fff" }
                         : { color: colors.text }
                     }
                   >
+                    {/* Vòng tròn số bé lại */}
                     <div
-                      className="my-lesson-num flex items-center justify-center text-[11px] font-bold transition-colors"
+                      className="flex items-center justify-center text-[10px] font-bold"
                       style={{
-                        width: "24px",
-                        height: "24px",
+                        width: "20px",
+                        height: "20px",
                         borderRadius: "50%",
                         flexShrink: 0,
                         backgroundColor: isActive ? "#ffffff" : colors.inputBg,
@@ -384,11 +357,14 @@ export function Learning() {
                     >
                       {l.order_num}
                     </div>
-                    <span className="text-sm font-bold truncate flex-1 transition-transform">
-                      {l.title}
+
+                    {/* Chữ tiêu đề bé lại (text-[13px]) */}
+                    <span className="text-[13px] font-semibold truncate flex-1">
+                      {l.title === "y" ? "Bài học bổ trợ" : l.title}
                     </span>
+
                     {!isActive && l.id < lesson.id && (
-                      <CheckCircle2 size={16} className="text-green-500" />
+                      <CheckCircle2 size={14} className="text-green-500" />
                     )}
                   </button>
                 );
@@ -435,266 +411,298 @@ export function Learning() {
               }
             `}</style>
 
-            {!showQuiz ? (
-              <div className="w-full flex flex-col items-center">
-                {/* TIÊU ĐỀ BÀI HỌC */}
-                <div className="w-full max-w-[850px] mb-8 animate-in fade-in slide-in-from-left-6 duration-700">
-                  <span
-                    className="text-[10px] font-black px-4 py-1.5 rounded-full uppercase border tracking-widest"
-                    style={{
-                      backgroundColor: `${colors.primary}22`,
-                      color: colors.primary,
-                      borderColor: `${colors.primary}44`,
-                    }}
-                  >
-                    {tl.lessonLabel} {lesson.order_num}
-                  </span>
-                  <h2
-                    className="text-4xl md:text-5xl font-black mt-4 tracking-tighter leading-tight"
-                    style={{ color: colors.primary }}
-                  >
-                    {lesson.title}
-                  </h2>
-                </div>
+            <div className="w-full flex flex-col items-center">
+              {/* --- CHÈN CON ROBOT VÀO ĐÂY (Luôn hiển thị ở trên cùng) --- */}
+              <div className="w-full max-w-[850px] mb-6">
+                <MentorAdvice
+                  userName={user?.name || "Bạn học thân mến"}
+                  advice={advice}
+                />
+              </div>
 
-                {/* KHỐI NỘI DUNG TRẮNG (CARD) */}
+              {/* KHỐI NỘI DUNG TRẮNG (CARD) */}
+              <div
+                className="w-full relative overflow-hidden flex flex-col transition-all duration-500"
+                style={{
+                  backgroundColor: colors.card,
+                  borderRadius: "32px",
+                  boxShadow: isDark
+                    ? "0 20px 50px rgba(0,0,0,0.3)"
+                    : "0 20px 50px rgba(0,0,0,0.05)",
+                  minHeight: "75vh",
+                }}
+              >
+                {/* Thanh highlight trên cùng */}
                 <div
-                  className="w-full relative overflow-hidden flex flex-col transition-all duration-500"
-                  style={{
-                    backgroundColor: colors.card,
-                    borderRadius: "32px",
-                    boxShadow: isDark
-                      ? "0 20px 50px rgba(0,0,0,0.3)"
-                      : "0 20px 50px rgba(0,0,0,0.05)",
-                    marginBottom: "40px",
-                    minHeight: "75vh",
-                  }}
-                >
-                  {/* Thanh highlight trên cùng */}
-                  <div
-                    className="absolute top-0 left-0 w-full z-10"
-                    style={{ height: "3px", backgroundColor: colors.primary }}
-                  />
+                  className="absolute top-0 left-0 w-full z-10"
+                  style={{ height: "3px", backgroundColor: colors.primary }}
+                />
 
-                  {isPracticeMode ? (
-                    /* --- GIAO DIỆN THỰC HÀNH: EDITOR + PREVIEW --- */
-                    <div className="flex-1 flex flex-col animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
-                      <div
-                        className="p-4 flex justify-between items-center border-b"
-                        style={{ borderColor: colors.divider }}
+                {showQuiz ? (
+                  /* --- GIAO DIỆN QUIZ (Hiển thị bên trong Card) --- */
+                /* --- GIAO DIỆN QUIZ (Hiển thị bên trong Card nội dung) --- */
+<div className="flex-1 flex flex-col p-6 md:p-10 animate-in zoom-in-95 duration-300 overflow-hidden">
+  {/* Nút quay lại lý thuyết - Làm nhỏ gọn lại */}
+  <button
+    onClick={() => setShowQuiz(false)}
+    className="mb-6 flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all hover:opacity-70"
+    style={{ color: colors.muted }}
+  >
+    <ChevronLeft size={16} /> {tl.backToTheory}
+  </button>
+
+  {/* Khung chứa nội dung Quiz: Ép font-size và giới hạn chiều cao để cuộn nội bộ */}
+  <div 
+    className="flex-1 flex flex-col max-w-2xl mx-auto w-full overflow-y-auto pr-2 devmentor-scrollbar"
+    style={{ 
+      maxHeight: "calc(100vh - 500px)", // Giới hạn chiều cao để nút FOOTER không bị đẩy mất
+      fontSize: "13px",                // Ép font chữ bé lại đồng bộ với lý thuyết
+      lineHeight: "1.5"
+    }}
+  >
+    {/* Phần Header Quiz thu nhỏ */}
+    <div className="mb-4">
+      <span 
+        className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border"
+        style={{ 
+          backgroundColor: `${colors.primary}10`, 
+          color: colors.primary,
+          borderColor: `${colors.primary}30` 
+        }}
+      >
+        🎯 Thử thách bài học (+{lesson.xp_reward} XP)
+      </span>
+    </div>
+
+    <QuizComponent
+      // Truyền đúng danh sách câu hỏi từ database (hiện tại là 1 câu)
+      questions={lesson.quizzes?.[0]?.quiz_questions || []}
+      lessonId={lesson.id}
+      userId={user!.id}
+      xpReward={lesson.xp_reward}
+      onFinished={async () => {
+        setShowQuiz(false);
+        setLoading(true);
+        try {
+          await lessonService.completeLesson(
+            user!.id,
+            lesson.id,
+            lesson.xp_reward,
+            true,
+          );
+
+          toast.success(
+            language === "vi"
+              ? "Chính xác! Bạn đã hoàn thành bài học."
+              : "Perfect! Lesson completed!",
+          );
+
+          // Logic tìm bài học tiếp theo
+          const currentIdx = allLessons.findIndex(
+            (l) => l.id === lesson.id,
+          );
+          const nextLesson = allLessons[currentIdx + 1];
+
+          if (nextLesson) {
+            fetchAndGenerateLesson(
+              nextLesson.id,
+              courseTitle,
+            );
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          } else {
+            toast.success(tl.completedCourse);
+          }
+        } catch (e) {
+          toast.error(tl.saveError);
+        } finally {
+          setLoading(false);
+        }
+      }}
+    />
+  </div>
+</div>
+                ) : isPracticeMode ? (
+                  /* --- GIAO DIỆN THỰC HÀNH: EDITOR + PREVIEW --- */
+                  <div className="flex-1 flex flex-col animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
+                    <div
+                      className="p-4 flex justify-between items-center border-b"
+                      style={{ borderColor: colors.divider }}
+                    >
+                      <button
+                        onClick={() => setIsPracticeMode(false)}
+                        className="text-xs font-bold flex items-center gap-2 hover:opacity-70"
+                        style={{ color: colors.muted }}
                       >
-                        <button
-                          onClick={() => setIsPracticeMode(false)}
-                          className="text-xs font-bold flex items-center gap-2 hover:opacity-70"
-                          style={{ color: colors.muted }}
+                        <ChevronLeft size={14} /> {tl.backToTheory}
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <Code size={14} style={{ color: colors.primary }} />
+                        <span
+                          className="text-[10px] font-black uppercase tracking-widest"
+                          style={{ color: colors.primary }}
                         >
-                          <ChevronLeft size={14} /> {tl.backToTheory}
-                        </button>
-                        <div className="flex items-center gap-2">
-                          <Code size={14} style={{ color: colors.primary }} />
-                          <span
-                            className="text-[10px] font-black uppercase tracking-widest"
-                            style={{ color: colors.primary }}
-                          >
-                            Live Code Workspace
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-black/5">
-                        {/* TRÁI: EDITOR GÕ CODE */}
-                        <div
-                          className="flex-1 border-r relative"
-                          style={{ borderColor: colors.divider }}
-                        >
-                          <Editor
-                            height="100%"
-                            defaultLanguage="html"
-                            theme={isDark ? "vs-dark" : "light"}
-                            value={editorCode}
-                            onChange={(value) => setEditorCode(value || "")}
-                            options={{
-                              minimap: { enabled: false },
-                              fontSize: 16,
-                              padding: { top: 20 },
-                              roundedSelection: true,
-                              wordWrap: "on",
-                              automaticLayout: true,
-                            }}
-                          />
-                        </div>
-
-                        {/* PHẢI: LIVE PREVIEW KẾT QUẢ */}
-                        <div className="flex-1 bg-white relative">
-                          <div className="absolute top-2 right-4 z-10 text-[9px] font-black text-slate-300 pointer-events-none uppercase tracking-widest">
-                            Preview
-                          </div>
-                          <iframe
-                            title="preview"
-                            srcDoc={editorCode}
-                            className="w-full h-full border-none"
-                            sandbox="allow-scripts"
-                          />
-                        </div>
+                          Live Code Workspace
+                        </span>
                       </div>
                     </div>
-                  ) : (
-                    /* --- GIAO DIỆN LÝ THUYẾT: NỘI DUNG MARKDOWN --- */
-                    <div className="p-10 md:p-20 flex-1 flex flex-col animate-in fade-in duration-500">
-                      <div className="custom-prose flex-1">
-                        <div
-                          dangerouslySetInnerHTML={{
-                            __html: marked.parse(lesson.content || ""),
+
+                    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-black/5">
+                      {/* TRÁI: EDITOR GÕ CODE */}
+                      <div
+                        className="flex-1 border-r relative"
+                        style={{ borderColor: colors.divider }}
+                      >
+                        <Editor
+                          height="100%"
+                          defaultLanguage="html"
+                          theme={isDark ? "vs-dark" : "light"}
+                          value={editorCode}
+                          onChange={(value) => setEditorCode(value || "")}
+                          options={{
+                            minimap: { enabled: false },
+                            fontSize: 16,
+                            padding: { top: 20 },
+                            roundedSelection: true,
+                            wordWrap: "on",
+                            automaticLayout: true,
                           }}
                         />
                       </div>
 
-                      {/* Nút mồi thực hành */}
-                      <div className="mt-16 flex justify-center">
-                        <button
-                          onClick={() => setIsPracticeMode(true)}
-                          className="flex items-center gap-3 px-10 py-5 rounded-2xl font-black text-sm transition-all hover:scale-105 active:scale-95 shadow-lg"
-                          style={{
-                            backgroundColor: `${colors.primary}15`,
-                            color: colors.primary,
-                            border: `1px solid ${colors.primary}44`,
-                          }}
-                        >
-                          <Code size={20} />{" "}
-                          {language === "vi"
-                            ? "BẮT ĐẦU THỰC HÀNH"
-                            : "START PRACTICE"}
-                        </button>
+                      {/* PHẢI: LIVE PREVIEW KẾT QUẢ */}
+                      <div className="flex-1 bg-white relative">
+                        <div className="absolute top-2 right-4 z-10 text-[9px] font-black text-slate-300 pointer-events-none uppercase tracking-widest">
+                          Preview
+                        </div>
+                        <iframe
+                          title="preview"
+                          srcDoc={editorCode}
+                          className="w-full h-full border-none"
+                          sandbox="allow-scripts"
+                        />
                       </div>
                     </div>
-                  )}
+                  </div>
+                ) : (
+                  /* --- GIAO DIỆN LÝ THUYẾT: NỘI DUNG MARKDOWN --- */
+                  <div className=" flex-1 flex flex-col animate-in fade-in duration-500">
+                    <div
+                      className="custom-prose flex-1 overflow-y-auto pr-4"
+                      style={{
+                        color: colors.text,
+                        maxHeight: "calc(100vh - 450px)",
+                        minHeight: "300px",
+                        fontSize: "13px",
+                        lineHeight: "1.5",
+                      }}
+                    >
+                      <div
+                        dangerouslySetInnerHTML={{
+                          __html: marked.parse(lesson.content || ""),
+                        }}
+                      />
+                    </div>
 
-                  {/* FOOTER: CHỨA CÁC NÚT ĐIỀU HƯỚNG CỐ ĐỊNH */}
-                  <div
-                    className="p-6 md:p-8 border-t flex justify-end gap-4"
-                    style={{ borderColor: colors.divider }}
-                  >
-                    {/* NÚT KIỂM TRA: CHỈ HIỆN KHI ĐANG CODE */}
-                    {isPracticeMode && (
+                    {/* CỤM NÚT ĐIỀU HƯỚNG BÊN TRONG NỘI DUNG */}
+                    <div className="mt-16 gap-6 flex justify-center">
                       <button
-                        onClick={handleCheckCode}
-                        disabled={checking}
-                        className="flex items-center gap-2 px-8 py-4 rounded-xl font-black text-xs md:text-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50 border shadow-sm"
+                        onClick={() => setIsPracticeMode(true)}
+                        className="flex items-center gap-3 px-10 py-5 rounded-2xl font-black text-sm transition-all hover:scale-105 active:scale-95 shadow-lg"
                         style={{
-                          backgroundColor: isDark
-                            ? "rgba(255,255,255,0.03)"
-                            : "#f8fafc",
+                          backgroundColor: `${colors.primary}15`,
                           color: colors.primary,
-                          borderColor: `${colors.primary}44`,
+                          border: `1px solid ${colors.primary}44`,
                         }}
                       >
-                        {checking ? (
-                          <Loader2 size={18} className="animate-spin" />
-                        ) : (
-                          <Zap size={18} className="text-yellow-500" />
-                        )}
-                        {language === "vi" ? "KIỂM TRA BẰNG AI" : "AI CHECK"}
+                        <Code size={20} />
+                        {language === "vi"
+                          ? "BẮT ĐẦU THỰC HÀNH"
+                          : "START PRACTICE"}
                       </button>
-                    )}
-
-                    {/* NÚT BÀI TIẾP THEO / LÀM QUIZ */}
-                    <button
-                      onClick={async () => {
-                        const hasQuiz =
-                          lesson.quizzes && lesson.quizzes.length > 0;
-                        if (hasQuiz) {
-                          setShowQuiz(true);
-                        } else {
-                          setLoading(true);
-                          try {
-                            await lessonService.completeLesson(
-                              user!.id,
-                              lesson.id,
-                              lesson.xp_reward,
-                              true,
-                            );
-                            const currentIdx = allLessons.findIndex(
-                              (l) => l.id === lesson.id,
-                            );
-                            const nextLesson = allLessons[currentIdx + 1];
-                            if (nextLesson) {
-                              fetchAndGenerateLesson(
-                                nextLesson.id,
-                                courseTitle,
+                      <button
+                        onClick={async () => {
+                          const hasQuiz =
+                            lesson.quizzes && lesson.quizzes.length > 0;
+                          if (hasQuiz) {
+                            setShowQuiz(true);
+                          } else {
+                            setLoading(true);
+                            try {
+                              await lessonService.completeLesson(
+                                user!.id,
+                                lesson.id,
+                                lesson.xp_reward,
+                                true,
                               );
-                              window.scrollTo({ top: 0, behavior: "smooth" });
-                            } else {
-                              toast.success(tl.completedCourse);
+                              const currentIdx = allLessons.findIndex(
+                                (l) => l.id === lesson.id,
+                              );
+                              const nextLesson = allLessons[currentIdx + 1];
+                              if (nextLesson) {
+                                fetchAndGenerateLesson(
+                                  nextLesson.id,
+                                  courseTitle,
+                                );
+                                window.scrollTo({
+                                  top: 0,
+                                  behavior: "smooth",
+                                });
+                              } else {
+                                toast.success(tl.completedCourse);
+                              }
+                            } catch (e) {
+                              toast.error(tl.saveError);
+                            } finally {
+                              setLoading(false);
                             }
-                          } catch (e) {
-                            toast.error(tl.saveError);
-                          } finally {
-                            setLoading(false);
                           }
-                        }
-                      }}
-                      className="btn-action-custom text-white font-black flex items-center px-10 md:px-14 py-4 md:py-5 rounded-xl md:rounded-2xl gap-3 transition-all hover:scale-[1.03] active:scale-95 shadow-xl"
-                    >
-                      {lesson.quizzes && lesson.quizzes.length > 0 ? (
-                        <>
-                          <Award size={24} /> {tl.takeQuiz} (+{lesson.xp_reward}{" "}
-                          XP)
-                        </>
-                      ) : (
-                        <>
-                          {tl.nextLesson} <ChevronRight size={24} />
-                        </>
-                      )}
-                    </button>
+                        }}
+                        className="btn-action-custom text-white font-black flex items-center px-10 md:px-14 py-4 md:py-5 rounded-xl md:rounded-2xl gap-3 transition-all hover:scale-[1.03] active:scale-95 shadow-xl"
+                      >
+                        {lesson.quizzes && lesson.quizzes.length > 0 ? (
+                          <>
+                            <Award size={24} /> {tl.takeQuiz} (+
+                            {lesson.xp_reward} XP)
+                          </>
+                        ) : (
+                          <>
+                            {tl.nextLesson} <ChevronRight size={24} />
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
+                )}
+
+                {/* FOOTER: CHỈ HIỆN KHI CẦN THIẾT (Tùy chỉnh logic Footer của bạn tại đây) */}
+                <div
+                  className="p-6 md:p-8 border-t flex justify-end gap-4"
+                  style={{ borderColor: colors.divider }}
+                >
+                  {isPracticeMode && (
+                    <button
+                      onClick={handleCheckCode}
+                      disabled={checking}
+                      className="flex items-center gap-2 px-8 py-4 rounded-xl font-black text-xs md:text-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50 border shadow-sm"
+                      style={{
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.03)"
+                          : "#f8fafc",
+                        color: colors.primary,
+                        borderColor: `${colors.primary}44`,
+                      }}
+                    >
+                      {checking ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Zap size={18} className="text-yellow-500" />
+                      )}
+                      {language === "vi" ? "KIỂM TRA BẰNG AI" : "AI CHECK"}
+                    </button>
+                  )}
                 </div>
               </div>
-            ) : (
-              /* GIAO DIỆN QUIZ (Độc lập với card lý thuyết) */
-              <div className="max-w-2xl mx-auto py-10 px-6 w-full animate-in zoom-in-95 duration-300">
-                <button
-                  onClick={() => setShowQuiz(false)}
-                  className="mb-8 flex items-center gap-2 font-bold transition-colors hover:opacity-70"
-                  style={{ color: colors.muted }}
-                >
-                  <ChevronLeft size={20} /> {tl.backToTheory}
-                </button>
-                <QuizComponent
-                  questions={lesson.quizzes?.[0]?.quiz_questions || []}
-                  lessonId={lesson.id}
-                  userId={user!.id}
-                  xpReward={lesson.xp_reward}
-                  onFinished={async () => {
-                    setShowQuiz(false);
-                    setLoading(true);
-                    try {
-                      await lessonService.completeLesson(
-                        user!.id,
-                        lesson.id,
-                        lesson.xp_reward,
-                        true,
-                      );
-                      toast.success(
-                        language === "vi"
-                          ? "Chúc mừng bạn đã hoàn thành!"
-                          : "Lesson completed!",
-                      );
-                      const currentIdx = allLessons.findIndex(
-                        (l) => l.id === lesson.id,
-                      );
-                      const nextLesson = allLessons[currentIdx + 1];
-                      if (nextLesson)
-                        fetchAndGenerateLesson(nextLesson.id, courseTitle);
-                      else toast.success(tl.completedCourse);
-                    } catch (e) {
-                      toast.error(tl.saveError);
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                />
-              </div>
-            )}
+            </div>
           </main>
         </div>
       </div>

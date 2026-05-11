@@ -44,7 +44,7 @@ const handleComplete = async () => {
   setIsLoading(true);
   try {
     await updateUser({
-      role,
+      
       onboarding_completed: true,
     });
     toast.success('Hoàn tất thiết lập!');

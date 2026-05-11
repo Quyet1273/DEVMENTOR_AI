@@ -4,6 +4,7 @@ import { enrollmentService } from "../services/enrollmentService";
 import { supabase } from "../lib/supabase";
 // import { useCourseController } from "../controllers/useCourserController";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import {
   GraduationCap,
   Star,
@@ -39,6 +40,9 @@ export function Courses() {
 
   const categories = ["all", "Frontend", "Backend", "Fullstack", "Tools"];
   const levels = ["all", "beginner", "intermediate", "advanced"];
+  // đổi màu theo theme
+  const { theme, colors } = useTheme(); // Lấy theme ('light'/'dark') và bảng màu colors
+  const isDark = theme === "dark";
 
   // 1. LẤY DỮ LIỆU KHÓA HỌC TRỰC TIẾP
   useEffect(() => {
@@ -75,41 +79,45 @@ export function Courses() {
   const handleEnrollClick = async (course: any) => {
     const isEnrolled = enrolledCourseIds.includes(course.id);
 
-    // Nếu đã đăng ký rồi thì phi thẳng vào Roadmap luôn, không gọi AI nữa
+    // Nếu đã đăng ký, chuyển hướng vào trang học ngay
     if (isEnrolled) {
-      navigate(`/roadmap/${course.id}`);
+      navigate(`/learning/${course.id}`);
       return;
     }
 
     try {
       if (!user) {
-        alert("Quỳnh ơi, bạn cần đăng nhập để AI thiết lập lộ trình!");
+        alert("Bạn cần đăng nhập để đăng ký khóa học!");
         return;
       }
 
       setIsEnrolling(course.id);
 
-      // Gọi service xử lý AI + DB
-      const result = await enrollmentService.enrollWithAI(user.id, course);
+      // Thực hiện đăng ký dựa trên schema bảng course_enrollments
+      const { error } = await supabase.from("course_enrollments").insert([
+        {
+          user_id: user.id, // Kiểu uuid
+          course_id: course.id, // Kiểu int8 (số)
+          // Các cột khác như enrolled_at, progress, is_completed
+          // đều đã có giá trị mặc định (now(), 0, false) nên không cần truyền vào.
+        },
+      ]);
 
-      if (result.success) {
-        // CẬP NHẬT STATE TỨC THÌ ĐỂ NÚT ĐỔI MÀU/CHỮ
-        setEnrolledCourseIds((prev) => [...prev, course.id]);
+      if (error) throw error;
 
-        alert("AI đã thiết lập lộ trình riêng cho bạn!");
-        navigate(`/roadmap/${course.id}`);
-      }
+      // Cập nhật state để giao diện thay đổi ngay lập tức
+      setEnrolledCourseIds((prev) => [...prev, course.id]);
+
+      alert("Đăng ký khóa học thành công!");
+      navigate(`/learning/${course.id}`);
     } catch (error: any) {
-      // Xử lý khi có lỗi trùng lặp (đề phòng bấm nhanh 2 lần)
-      if (
-        error.code === "23505" ||
-        error.message?.includes("unique_violation")
-      ) {
-        setEnrolledCourseIds((prev) => [...prev, course.id]); // Cập nhật lại state cho chuẩn
-        navigate(`/roadmap/${course.id}`);
+      // Xử lý lỗi trùng lặp đăng ký
+      if (error.code === "23505") {
+        setEnrolledCourseIds((prev) => [...prev, course.id]);
+        navigate(`/learning/${course.id}`);
       } else {
         console.error("Lỗi đăng ký:", error);
-        alert("Có chút trục trặc khi gọi AI, thử lại nhé!");
+        alert("Không thể đăng ký, vui lòng thử lại sau.");
       }
     } finally {
       setIsEnrolling(null);
@@ -117,36 +125,36 @@ export function Courses() {
   };
 
   // 3. HIỆU ỨNG ANIMATION BANNER (DỌN DẸP TRÙNG LẶP)
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!bannerRef.current) return;
-      const rect = bannerRef.current.getBoundingClientRect();
-      mousePos.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
-    };
+  // useEffect(() => {
+  //   const handleMouseMove = (e: MouseEvent) => {
+  //     if (!bannerRef.current) return;
+  //     const rect = bannerRef.current.getBoundingClientRect();
+  //     mousePos.current = {
+  //       x: e.clientX - rect.left,
+  //       y: e.clientY - rect.top,
+  //     };
+  //   };
 
-    const animate = () => {
-      if (blobRef.current) {
-        const speed = 0.15;
-        blobPos.current.x += (mousePos.current.x - blobPos.current.x) * speed;
-        blobPos.current.y += (mousePos.current.y - blobPos.current.y) * speed;
-        blobRef.current.style.transform = `translate(${blobPos.current.x - 150}px, ${blobPos.current.y - 150}px)`;
-      }
-      requestAnimationFrame(animate);
-    };
+  //   const animate = () => {
+  //     if (blobRef.current) {
+  //       const speed = 0.15;
+  //       blobPos.current.x += (mousePos.current.x - blobPos.current.x) * speed;
+  //       blobPos.current.y += (mousePos.current.y - blobPos.current.y) * speed;
+  //       blobRef.current.style.transform = `translate(${blobPos.current.x - 150}px, ${blobPos.current.y - 150}px)`;
+  //     }
+  //     requestAnimationFrame(animate);
+  //   };
 
-    const banner = bannerRef.current;
-    if (banner) {
-      banner.addEventListener("mousemove", handleMouseMove);
-      const animationId = requestAnimationFrame(animate);
-      return () => {
-        banner.removeEventListener("mousemove", handleMouseMove);
-        cancelAnimationFrame(animationId);
-      };
-    }
-  }, []);
+  //   const banner = bannerRef.current;
+  //   if (banner) {
+  //     banner.addEventListener("mousemove", handleMouseMove);
+  //     const animationId = requestAnimationFrame(animate);
+  //     return () => {
+  //       banner.removeEventListener("mousemove", handleMouseMove);
+  //       cancelAnimationFrame(animationId);
+  //     };
+  //   }
+  // }, []);
 
   // 4. LOGIC TÍNH TOÁN STATS & FILTER
   const stats = [
@@ -223,146 +231,16 @@ export function Courses() {
       {" "}
       {/* ---  BANNER KHÓA HỌC  --- */}
       <div className="max-w-7xl mx-auto">
-        <div
-          ref={bannerRef}
-          style={{
-            position: "relative",
-            overflow: "hidden",
-            borderRadius: "32px",
-            width: "100%",
-            padding: "80px 20px",
-            backgroundColor: "#020617",
-            border: "1px solid rgba(59, 130, 246, 0.2)",
-            boxShadow: "0 25px 50px rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            textAlign: "center",
-            cursor: "crosshair",
-          }}
-        >
-          <style>{`
-        @keyframes moveGrid { from { background-position: 0 0; } to { background-position: 0 45px; } }
-        @keyframes scanline { 0% { top: -100%; } 100% { top: 200%; } }
-        @keyframes pro-dot-pulse {
-          0%, 100% { transform: scale(1); opacity: 0.3; filter: blur(1px); }
-          50% { transform: scale(1.4); opacity: 1; filter: blur(0px); box-shadow: 0 0 15px currentColor; }
-        }
-      `}</style>
+        <header className="mb-16">
+          <h2
+            className="text-3xl font-black uppercase tracking-tighter"
+            style={{ color: colors.primary }}
+          >
+            Khám phá khóa học
+          </h2>
+        </header>
 
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              backgroundImage:
-                "linear-gradient(rgba(59, 130, 246, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px)",
-              backgroundSize: "45px 45px",
-              animation: "moveGrid 3s linear infinite",
-              pointerEvents: "none",
-              zIndex: 1,
-            }}
-          />
-
-          <div
-            ref={blobRef}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "300px",
-              height: "300px",
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle, rgba(34, 211, 238, 0.3) 0%, rgba(59, 130, 246, 0.15) 40%, transparent 70%)",
-              filter: "blur(50px)",
-              pointerEvents: "none",
-              zIndex: 0,
-              willChange: "transform",
-            }}
-          />
-
-          <div style={{ position: "relative", zIndex: 10 }}>
-            <div className="flex gap-3 justify-center mb-6">
-              <div
-                style={{
-                  width: "10px",
-                  height: "10px",
-                  borderRadius: "50%",
-                  backgroundColor: "#22c55e",
-                  animation: "pro-dot-pulse 1.5s infinite ease-in-out",
-                }}
-              />
-              <div
-                style={{
-                  width: "10px",
-                  height: "10px",
-                  borderRadius: "50%",
-                  backgroundColor: "#3b82f6",
-                  animation: "pro-dot-pulse 1.5s infinite ease-in-out",
-                  animationDelay: "0.2s",
-                }}
-              />
-              <div
-                style={{
-                  width: "10px",
-                  height: "10px",
-                  borderRadius: "50%",
-                  backgroundColor: "#a855f7",
-                  animation: "pro-dot-pulse 1.5s infinite ease-in-out",
-                  animationDelay: "0.4s",
-                }}
-              />
-            </div>
-
-            <div style={{ color: "#ffffff" }}>
-              <h1
-                style={{
-                  fontSize: "clamp(32px, 7vw, 60px)",
-                  fontWeight: "900",
-                  letterSpacing: "-0.05em",
-                  lineHeight: "1.2",
-                }}
-              >
-                <span
-                  style={{
-                    background:
-                      "linear-gradient(to right, #22d3ee, #3b82f6, #a855f7)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    filter: "drop-shadow(0 0 20px rgba(34, 211, 238, 0.4))",
-                  }}
-                >
-                  KHÓA HỌC CHO SỰ NGHIỆP DEV CỦA BẠN
-                </span>
-              </h1>
-
-              <div
-                style={{
-                  width: "150px",
-                  height: "2px",
-                  background:
-                    "linear-gradient(90deg, transparent, #22d3ee, transparent)",
-                  margin: "25px auto",
-                }}
-              />
-
-              <p
-                style={{
-                  fontFamily: "monospace",
-                  color: "#94a3b8",
-                  fontSize: "18px",
-                  maxWidth: "600px",
-                  margin: "0 auto",
-                }}
-              >
-                Chinh phục đỉnh cao lập trình, làm chủ tương lai cùng AI
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto w-full px-6 md:px-8">
+        {/* <div className="max-w-7xl mx-auto w-full px-6 md:px-8">
           <div
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
             style={{
@@ -378,21 +256,26 @@ export function Courses() {
                 onMouseEnter={() => setIsCardHovered(index)}
                 onMouseLeave={() => setIsCardHovered(null)}
                 style={{
-                  backgroundColor: "#020617",
+                  // ĐỔI: Dùng màu card từ ThemeContext
+                  backgroundColor: colors.card,
                   borderRadius: "24px",
                   padding: "28px",
                   cursor: "pointer",
                   transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+                  // ĐỔI: Border tự thích ứng theo theme
                   border:
-                    isCardHovered && isCardHovered === index
+                    isCardHovered === index
                       ? `1.5px solid ${item.color}`
-                      : "1px solid rgba(255, 255, 255, 0.1)",
+                      : `1px solid ${colors.border}`,
+                  // ĐỔI: Shadow thông minh (Dark mode sâu, Light mode nhẹ)
                   boxShadow:
-                    isCardHovered && isCardHovered === index
+                    isCardHovered === index
                       ? `0 0 30px ${item.color}40, inset 0 0 15px ${item.color}20`
-                      : "0 10px 30px rgba(0, 0, 0, 0.5)",
+                      : isDark
+                        ? "0 10px 30px rgba(0, 0, 0, 0.5)"
+                        : "0 10px 25px rgba(0, 0, 0, 0.05)",
                   transform:
-                    isCardHovered && isCardHovered === index
+                    isCardHovered === index
                       ? "translateY(-10px)"
                       : "translateY(0)",
                 }}
@@ -408,7 +291,10 @@ export function Courses() {
                   <div
                     style={{
                       color: item.color,
-                      filter: `drop-shadow(0 0 8px ${item.color})`,
+                      // ĐỔI: Chỉ đổ bóng icon khi ở Dark Mode để tránh bị lem màu ở nền sáng
+                      filter: isDark
+                        ? `drop-shadow(0 0 8px ${item.color})`
+                        : "none",
                     }}
                   >
                     {item.icon}
@@ -417,10 +303,13 @@ export function Courses() {
                     style={{
                       fontSize: "42px",
                       fontWeight: "900",
-                      color: "#ffffff",
+                      // ĐỔI: Chữ tự động chuyển Đen/Trắng theo theme
+                      color: colors.text,
                       lineHeight: "1",
                       fontFamily: "system-ui",
-                      textShadow: "0 0 15px rgba(255,255,255,0.2)",
+                      textShadow: isDark
+                        ? "0 0 15px rgba(255,255,255,0.2)"
+                        : "none",
                     }}
                   >
                     {item.val}
@@ -430,7 +319,8 @@ export function Courses() {
                 <div>
                   <p
                     style={{
-                      color: "#475569",
+                      // ĐỔI: Dùng màu muted (xám) của hệ thống
+                      color: colors.muted,
                       fontSize: "11px",
                       fontWeight: "700",
                       textTransform: "uppercase",
@@ -447,7 +337,9 @@ export function Courses() {
                       fontSize: "14px",
                       fontWeight: "800",
                       marginTop: "6px",
-                      filter: `drop-shadow(0 0 5px ${item.color}80)`,
+                      filter: isDark
+                        ? `drop-shadow(0 0 5px ${item.color}80)`
+                        : "none",
                     }}
                   >
                     status:{" "}
@@ -462,22 +354,30 @@ export function Courses() {
               </div>
             ))}
           </div>
-        </div>
+        </div> */}
 
         <div
           className="grid md:grid-cols-3 gap-6 p-6 mb-8 rounded-xl"
           style={{
-            backgroundColor: "#000000",
-            border: "2px solid #22d3ee",
-            boxShadow: "0 0 20px rgba(34, 211, 238, 0.4)",
+            // ĐỔI: Dùng màu card hệ thống
+            backgroundColor: colors.card,
+            // ĐỔI: Dùng màu primary của theme cho border
+            border: `2px solid ${colors.primary}`,
+            // ĐỔI: Shadow thông minh
+            boxShadow: isDark
+              ? `0 0 20px ${colors.primary}40`
+              : "0 10px 25px rgba(0, 0, 0, 0.05)",
+            transition: "all 0.3s ease",
           }}
         >
+          {/* DANH MỤC */}
           <div className="flex flex-col">
             <label
               className="block text-sm font-bold mb-2 font-mono"
               style={{
-                color: "#ffffff",
-                textShadow: "0 0 10px rgba(255, 255, 255, 0.8)",
+                // ĐỔI: Chữ tự động Đen/Trắng
+                color: colors.text,
+                textShadow: isDark ? `0 0 10px ${colors.text}50` : "none",
               }}
             >
               DANH MỤC
@@ -485,18 +385,20 @@ export function Courses() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg outline-none cursor-pointer"
+              className="w-full px-4 py-2 rounded-lg outline-none cursor-pointer transition-all"
               style={{
-                backgroundColor: "#111111",
-                border: "1px solid #a855f7",
-                color: "#ffffff",
+                // ĐỔI: Dùng màu nền input động
+                backgroundColor: colors.inputBg,
+                border: `1px solid ${isDark ? colors.secondary : colors.border}`,
+                color: colors.text,
               }}
             >
               {categories.map((cat) => (
                 <option
                   key={cat}
                   value={cat}
-                  style={{ backgroundColor: "#000" }}
+                  // ĐỔI: Màu nền option trong dropdown
+                  style={{ backgroundColor: colors.card, color: colors.text }}
                 >
                   {cat === "all" ? "Tất cả danh mục" : cat}
                 </option>
@@ -504,12 +406,13 @@ export function Courses() {
             </select>
           </div>
 
+          {/* CẤP ĐỘ */}
           <div className="flex flex-col">
             <label
               className="block text-sm font-bold mb-2 font-mono"
               style={{
-                color: "#ffffff",
-                textShadow: "0 0 10px rgba(255, 255, 255, 0.8)",
+                color: colors.text,
+                textShadow: isDark ? `0 0 10px ${colors.text}50` : "none",
               }}
             >
               CẤP ĐỘ
@@ -517,18 +420,18 @@ export function Courses() {
             <select
               value={selectedLevel}
               onChange={(e) => setSelectedLevel(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg outline-none cursor-pointer"
+              className="w-full px-4 py-2 rounded-lg outline-none cursor-pointer transition-all"
               style={{
-                backgroundColor: "#111111",
-                border: "1px solid #a855f7",
-                color: "#ffffff",
+                backgroundColor: colors.inputBg,
+                border: `1px solid ${isDark ? colors.secondary : colors.border}`,
+                color: colors.text,
               }}
             >
               {levels.map((lvl) => (
                 <option
                   key={lvl}
                   value={lvl}
-                  style={{ backgroundColor: "#000" }}
+                  style={{ backgroundColor: colors.card, color: colors.text }}
                 >
                   {lvl === "all" ? "Tất cả cấp độ" : getLevelLabel(lvl)}
                 </option>
@@ -536,6 +439,7 @@ export function Courses() {
             </select>
           </div>
 
+          {/* CHECKBOX */}
           <div className="flex flex-col justify-end">
             <div
               className="hidden md:block mb-2"
@@ -548,13 +452,13 @@ export function Courses() {
                 checked={showEnrolledOnly}
                 onChange={(e) => setShowEnrolledOnly(e.target.checked)}
                 className="w-5 h-5 cursor-pointer"
-                style={{ accentColor: "#a855f7" }}
+                style={{ accentColor: colors.secondary }}
               />
               <span
                 className="text-sm font-bold font-mono uppercase"
                 style={{
-                  color: "#ffffff",
-                  textShadow: "0 0 8px rgba(255, 255, 255, 0.6)",
+                  color: colors.text,
+                  textShadow: isDark ? `0 0 8px ${colors.text}40` : "none",
                 }}
               >
                 Chỉ hiện khóa đã đăng ký
@@ -565,7 +469,7 @@ export function Courses() {
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredCourses.map((course) => {
-            // Kiểm tra xem khóa này Quỳnh đã đăng ký chưa
+            // Kiểm tra xem khóa này đã đăng ký chưa
             const isEnrolled = enrolledCourseIds.includes(course.id);
 
             return (
@@ -573,47 +477,56 @@ export function Courses() {
                 key={course.id}
                 className="rounded-xl overflow-hidden transition-all duration-300"
                 style={{
-                  backgroundColor: "#000000",
-                  border: "2px solid #22d3ee",
-                  boxShadow: "0 0 15px rgba(34, 211, 238, 0.2)",
+                  // ĐỔI: Dùng màu card hệ thống
+                  backgroundColor: colors.card,
+                  // ĐỔI: Ở Light Mode dùng border mờ, Dark Mode dùng border Primary
+                  border: `2px solid ${isDark ? colors.primary + "40" : colors.border}`,
+                  boxShadow: isDark
+                    ? "0 0 15px rgba(34, 211, 238, 0.1)"
+                    : "0 4px 12px rgba(0, 0, 0, 0.05)",
                   display: "flex",
                   flexDirection: "column",
                   cursor: "pointer",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform =
-                    "translateY(-8px) scale(1.02)";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 30px rgba(34, 211, 238, 0.5)";
-                  e.currentTarget.style.borderColor = "#ffffff";
+                    "translateY(-8px) scale(1.01)";
+                  e.currentTarget.style.boxShadow = isDark
+                    ? `0 0 30px ${colors.primary}50`
+                    : "0 15px 30px rgba(0, 0, 0, 0.1)";
+                  e.currentTarget.style.borderColor = colors.primary;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = "translateY(0) scale(1)";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 15px rgba(34, 211, 238, 0.2)";
-                  e.currentTarget.style.borderColor = "#22d3ee";
+                  e.currentTarget.style.boxShadow = isDark
+                    ? "0 0 15px rgba(34, 211, 238, 0.1)"
+                    : "0 4px 12px rgba(0, 0, 0, 0.05)";
+                  e.currentTarget.style.borderColor = isDark
+                    ? colors.primary + "40"
+                    : colors.border;
                 }}
               >
+                {/* PHẦN ẢNH THUMBNAIL */}
                 <div
                   className="relative h-48"
-                  style={{ backgroundColor: "#111" }}
+                  style={{ backgroundColor: colors.inputBg }}
                 >
                   <img
                     src={course.thumbnail}
                     alt={course.title}
                     className="w-full h-full object-cover transition-opacity duration-300"
-                    style={{ opacity: "0.7" }}
+                    style={{ opacity: isDark ? "0.7" : "0.9" }}
                     onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
                     onMouseLeave={(e) =>
-                      (e.currentTarget.style.opacity = "0.7")
+                      (e.currentTarget.style.opacity = isDark ? "0.7" : "0.9")
                     }
                   />
                   <span
                     className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-bold font-mono uppercase"
                     style={{
-                      backgroundColor: "#a855f7",
+                      backgroundColor: colors.secondary,
                       color: "#ffffff",
-                      boxShadow: "0 0 15px #a855f7",
+                      boxShadow: `0 0 10px ${colors.secondary}80`,
                       zIndex: 10,
                     }}
                   >
@@ -621,14 +534,15 @@ export function Courses() {
                   </span>
                 </div>
 
+                {/* NỘI DUNG CARD */}
                 <div className="p-6 flex flex-col grow">
                   <div className="mb-3">
                     <span
                       className="text-[10px] font-bold px-2 py-1 rounded uppercase font-mono"
                       style={{
-                        border: "1px solid #a855f7",
-                        color: "#a855f7",
-                        backgroundColor: "rgba(168, 85, 247, 0.1)",
+                        border: `1px solid ${colors.secondary}`,
+                        color: colors.secondary,
+                        backgroundColor: `${colors.secondary}15`,
                       }}
                     >
                       {course.category}
@@ -638,8 +552,9 @@ export function Courses() {
                   <h3
                     className="text-lg mb-2 line-clamp-1 font-bold font-mono uppercase transition-colors"
                     style={{
-                      color: "#ffffff",
-                      textShadow: "0 0 10px rgba(255, 255, 255, 0.5)",
+                      // ĐỔI: Chữ tự động Đen/Trắng
+                      color: colors.text,
+                      textShadow: isDark ? `0 0 10px ${colors.text}30` : "none",
                     }}
                   >
                     {course.title?.toUpperCase() || "UNNAMED COURSE"}
@@ -647,17 +562,21 @@ export function Courses() {
 
                   <p
                     className="text-sm mb-4 line-clamp-2"
-                    style={{ color: "#94a3b8" }}
+                    style={{ color: colors.muted }}
                   >
                     {course.description}
                   </p>
 
+                  {/* ICONS & STATS */}
                   <div
                     className="flex items-center gap-4 text-xs mb-4 font-mono"
-                    style={{ color: "#22d3ee" }}
+                    style={{ color: colors.primary }}
                   >
                     <span className="flex items-center gap-1">
-                      <Star className="w-4 h-4" style={{ fill: "#22d3ee" }} />{" "}
+                      <Star
+                        className="w-4 h-4"
+                        style={{ fill: colors.primary }}
+                      />{" "}
                       {course.rating}
                     </span>
                     <span className="flex items-center gap-1">
@@ -671,74 +590,60 @@ export function Courses() {
 
                   <div
                     className="flex items-center gap-2 text-xs mb-6 font-mono"
-                    style={{ color: "#64748b" }}
+                    style={{ color: colors.muted }}
                   >
                     <Clock className="w-4 h-4" />
                     <span>{course.duration?.toUpperCase() || "N/A"}</span>
                   </div>
 
+                  {/* NÚT ĐĂNG KÝ / HỌC TIẾP */}
                   <button
                     onClick={() =>
                       isEnrolled
-                        ? navigate(`/roadmap/${course.id}`)
+                        ? navigate(`/learning/${course.id}`)
                         : handleEnrollClick(course)
                     }
                     disabled={isEnrolling !== null}
                     className="w-full mt-auto py-3 rounded-lg font-bold flex items-center justify-center gap-2 uppercase font-mono transition-all"
                     style={{
-                      // Nếu đã đăng ký: Đổi sang Gradient Emerald (Xanh lá Cyber)
                       background:
                         isEnrolling === course.id
-                          ? "#1a1a1a"
+                          ? colors.inputBg
                           : isEnrolled
                             ? "linear-gradient(135deg, #10b981 0%, #059669 100%)"
-                            : "linear-gradient(135deg, #22d3ee 0%, #a855f7 100%)",
-                      color: isEnrolling === course.id ? "#666" : "#ffffff",
+                            : `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+                      color: "#ffffff",
                       boxShadow:
                         isEnrolling === course.id
                           ? "none"
                           : isEnrolled
                             ? "0 4px 15px rgba(16, 185, 129, 0.4)"
-                            : "0 4px 15px rgba(168, 85, 247, 0.4)",
+                            : `0 4px 15px ${colors.secondary}40`,
                       border:
-                        isEnrolling === course.id ? "1px solid #333" : "none",
+                        isEnrolling === course.id
+                          ? `1px solid ${colors.border}`
+                          : "none",
                       cursor:
                         isEnrolling === course.id ? "not-allowed" : "pointer",
-                      pointerEvents: isEnrolling !== null ? "none" : "auto",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (isEnrolling === null) {
-                        e.currentTarget.style.filter = "brightness(1.2)";
-                        e.currentTarget.style.boxShadow = isEnrolled
-                          ? "0 0 25px rgba(16, 185, 129, 0.6)"
-                          : "0 0 25px rgba(34, 211, 238, 0.6)";
-                        e.currentTarget.style.transform = "scale(1.05)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (isEnrolling === null) {
-                        e.currentTarget.style.filter = "brightness(1)";
-                        e.currentTarget.style.boxShadow = isEnrolled
-                          ? "0 4px 15px rgba(16, 185, 129, 0.4)"
-                          : "0 4px 15px rgba(168, 85, 247, 0.4)";
-                        e.currentTarget.style.transform = "scale(1)";
-                      }
                     }}
                   >
                     {isEnrolling === course.id ? (
                       <>
-                        <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-                        <span className="text-cyan-500">
-                          AI đang thiết lập...
+                        <div
+                          className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+                          style={{ borderColor: colors.primary }}
+                        ></div>
+                        <span style={{ color: colors.primary }}>
+                          AI ĐANG THIẾT LẬP...
                         </span>
                       </>
                     ) : isEnrolled ? (
                       <>
-                        <PlayCircle className="w-5 h-5" /> Tiếp tục học
+                        <PlayCircle className="w-5 h-5" /> TIẾP TỤC HỌC
                       </>
                     ) : (
                       <>
-                        <GraduationCap className="w-5 h-5" /> Đăng ký ngay
+                        <GraduationCap className="w-5 h-5" /> ĐĂNG KÝ NGAY
                       </>
                     )}
                   </button>

@@ -46,9 +46,14 @@ export function Sidebar({ isExpanded, setIsExpanded }: SidebarProps) {
     { path: "/quiz", icon: ClipboardCheck, label: t.quiz },
     { path: "/mock-interview", icon: Mic, label: t.mockInterview },
     { path: "/resources", icon: BookOpen, label: t.resources },
-    { path: "/manage-courses", icon: Layers3, label: t.manageCourses },
-    { path: "/reports", icon: BarChart3, label: t.reports },
-  ];
+    {
+      path: "/manage-courses",
+      icon: Layers3,
+      label: t.manageCourses,
+      isAdmin: true,
+    },
+    { path: "/reports", icon: BarChart3, label: t.reports, isAdmin: true },
+  ].filter((item) => !item.isAdmin || user?.role === "admin");
 
   const textStyle: React.CSSProperties = {
     opacity: isExpanded ? 1 : 0,

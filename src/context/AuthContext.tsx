@@ -10,12 +10,15 @@ interface UserProfile {
   current_level: string;
   level: number;
   xp: number;
+  quizzes_passed?: number;
   streak: number;
   total_hours: number;
   goals: any;
   interested_skills?: Record<string, number>;
   skillProfile?: Record<string, number>;
   onboarding_completed: boolean;
+  hearts: number;          
+  last_heart_reset: string;
 }
 
 interface AuthContextType {
