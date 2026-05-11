@@ -6,14 +6,14 @@ interface UserProfile {
   name: string;
   email: string;
   avatar?: string;
-  role: "student" | "mentor" | "admin"; // Cập nhật lại các Role chuẩn
+  role: "student" | "mentor" | "admin";
   current_level: string;
   level: number;
   xp: number;
   streak: number;
   total_hours: number;
   goals: any;
-  interested_skills?: Record<string, number>; // Cho trang Dashboard
+  interested_skills?: Record<string, number>;
   skillProfile?: Record<string, number>;
   onboarding_completed: boolean;
 }
@@ -26,8 +26,9 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateUser: (userData: Partial<UserProfile>) => Promise<void>;
   isAuthenticated: boolean;
-  isAdmin: boolean; // Thêm biến này cho tiện check ở UI
-  isVerified: boolean; // THÊM DÒNG NÀY
+  isAdmin: boolean;
+  isVerified: boolean;
+  verifyEmailCode: (email: string, token: string) => Promise<void>; // Định nghĩa hàm
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -39,9 +40,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-    // Lấy thông tin user từ hệ thống Auth để check email_confirmed_at
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    setIsVerified(!!authUser?.email_confirmed_at);
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      setIsVerified(!!authUser?.email_confirmed_at);
+
       const { data, error } = await supabase
         .from("users")
         .select("*")
@@ -66,9 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         fetchProfile(session.user.id);
       } else {
@@ -80,21 +79,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+  // Hàm xác thực mã OTP
+  const verifyEmailCode = async (email: string, token: string) => {
+    const { data, error } = await supabase.auth.verifyOtp({
       email,
-      password,
+      token,
+      type: 'signup', 
     });
+    if (error) throw error;
+    
+    // Cập nhật lại profile sau khi xác nhận thành công
+    if (data.user) {
+      await fetchProfile(data.user.id);
+    }
+  };
+
+  const login = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   };
 
   const register = async (name: string, email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password,options: {
-      // Dòng này rất quan trọng để dẫn người dùng quay lại web sau khi xác nhận
-      emailRedirectTo: window.location.origin, 
-      data: {
-        full_name: name,
-      }, }});
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { full_name: name },
+      },
+    });
+    
     if (error) throw error;
 
     if (data.user) {
@@ -108,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           xp: 0,
           streak: 0,
           total_hours: 0,
-          role: "student", // MẶC ĐỊNH LÀ STUDENT
+          role: "student",
           onboarding_completed: false,
           interested_skills: {},
           goals: [],
@@ -143,8 +157,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         updateUser,
         isAuthenticated: !!user,
-        isAdmin: user?.role === "admin", // Trả về true nếu là admin
-        isVerified, 
+        isAdmin: user?.role === "admin",
+        isVerified,
+        verifyEmailCode, // Xuất hàm ra để giao diện có thể sử dụng
       }}
     >
       {!loading && children}
