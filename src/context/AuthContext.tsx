@@ -27,6 +27,7 @@ interface AuthContextType {
   updateUser: (userData: Partial<UserProfile>) => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean; // Thêm biến này cho tiện check ở UI
+  isVerified: boolean; // THÊM DÒNG NÀY
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -34,9 +35,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isVerified, setIsVerified] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     try {
+    // Lấy thông tin user từ hệ thống Auth để check email_confirmed_at
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    setIsVerified(!!authUser?.email_confirmed_at);
       const { data, error } = await supabase
         .from("users")
         .select("*")
@@ -84,7 +89,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const register = async (name: string, email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password,options: {
+      // Dòng này rất quan trọng để dẫn người dùng quay lại web sau khi xác nhận
+      emailRedirectTo: window.location.origin, 
+      data: {
+        full_name: name,
+      }, }});
     if (error) throw error;
 
     if (data.user) {
@@ -134,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateUser,
         isAuthenticated: !!user,
         isAdmin: user?.role === "admin", // Trả về true nếu là admin
+        isVerified, 
       }}
     >
       {!loading && children}

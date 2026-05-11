@@ -8,7 +8,9 @@ import { Mail, Lock, User, Github, Facebook, Linkedin } from 'lucide-react';
 export default function AuthPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { login, register } = useAuth();
+const [isWaitingVerification, setIsWaitingVerification] = useState(false);
+const { login, register, isVerified, user } = useAuth(); // Lấy thêm isVerified từ context  
+
   
   const [isLogin, setIsLogin] = useState(location.state?.mode !== 'register');
   const [loading, setLoading] = useState(false);
@@ -16,24 +18,43 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      if (isLogin) {
-        await login(email, password);
-        toast.success('Chào mừng bạn quay lại!');
-      } else {
-        await register(name, email, password);
-        toast.success('Đăng ký thành công!');
+ const handleAuth = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  try {
+    if (isLogin) {
+      await login(email, password);
+      
+      // Đợi một chút để context cập nhật hoặc kiểm tra trực tiếp
+      // Nếu chưa xác thực email, hiện màn hình thông báo và dừng lại
+      if (!isVerified) {
+        setIsWaitingVerification(true);
+        toast.info('Tài khoản chưa được xác thực email.');
+        setLoading(false);
+        return; 
       }
+
+      toast.success('Chào mừng bạn quay lại!');
       navigate('/onboarding');
-    } catch (error: any) {
-      toast.error(error.message || 'Thao tác thất bại');
-    } finally {
-      setLoading(false);
+    } else {
+      await register(name, email, password);
+      // Đăng ký xong -> Hiện màn hình nhắc check mail ngay
+      setIsWaitingVerification(true); 
+      toast.success('Đăng ký thành công! Hãy kiểm tra email.');
     }
-  };
+  } catch (error: any) {
+    // Nếu Supabase cấu hình "Allow unconfirmed emails" là OFF, 
+    // lỗi chưa xác thực sẽ nhảy vào catch này.
+    if (error.message?.includes('Email not confirmed')) {
+        setIsWaitingVerification(true);
+        toast.error('Vui lòng xác nhận email trước khi đăng nhập');
+    } else {
+        toast.error(error.message || 'Thao tác thất bại');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   // --- INLINE STYLES (Đảm bảo độ chính xác tuyệt đối) ---
   const glassStyles = {
@@ -68,107 +89,164 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f5f7] flex items-center justify-center p-4">
-      <div style={glassStyles.container}>
-        
-        {/* --- FORM ĐĂNG KÝ (Nằm bên trái) --- */}
-        <div style={{
-          ...glassStyles.sidePanel,
-          left: 0,
-          opacity: isLogin ? 0 : 1,
-          zIndex: isLogin ? 1 : 2,
-          pointerEvents: isLogin ? 'none' : 'all'
-        }}>
-          <form onSubmit={handleAuth} className="w-full">
-            <h1 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '24px', textAlign: 'center', color: '#333' }}>
-              Create Account
-            </h1>
-            <div className="space-y-4">
-              <CustomInput icon={<User size={18}/>} placeholder="Name" value={name} onChange={setName} />
-              <CustomInput icon={<Mail size={18}/>} placeholder="Email" value={email} onChange={setEmail} />
-              <CustomInput icon={<Lock size={18}/>} placeholder="Password" type="password" value={password} onChange={setPassword} />
-              <button style={mainBtnStyle}>{loading ? 'Creating...' : 'Sign Up'}</button>
+  <div className="min-h-screen bg-[#f6f5f7] flex items-center justify-center p-4">
+    <div style={glassStyles.container}>
+      <AnimatePresence mode="wait">
+        {isWaitingVerification ? (
+          /* --- GIAO DIỆN XÁC THỰC EMAIL (Khi biến này là true) --- */
+          <motion.div
+            key="verification"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '60px',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ 
+              backgroundColor: '#f0f9ff', 
+              padding: '24px', 
+              borderRadius: '50%', 
+              marginBottom: '24px',
+              boxShadow: '0 10px 20px rgba(0, 180, 219, 0.1)' 
+            }}>
+              <Mail size={60} color="#0083b0" />
             </div>
-            <SocialSection />
-          </form>
-        </div>
-
-        {/* --- FORM ĐĂNG NHẬP (Nằm bên phải) --- */}
-        <div style={{
-          ...glassStyles.sidePanel,
-          left: '50%',
-          opacity: isLogin ? 1 : 0,
-          zIndex: isLogin ? 2 : 1,
-          pointerEvents: !isLogin ? 'none' : 'all'
-        }}>
-          <form onSubmit={handleAuth} className="w-full">
-            <h1 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '24px', textAlign: 'center', color: '#333' }}>
-              Sign In
+            
+            <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: '#333', marginBottom: '16px' }}>
+              Confirm your Email
             </h1>
-            <div className="space-y-4">
-              <CustomInput icon={<Mail size={18}/>} placeholder="Email" value={email} onChange={setEmail} />
-              <CustomInput icon={<Lock size={18}/>} placeholder="Password" type="password" value={password} onChange={setPassword} />
-              <p style={{ textAlign: 'right', fontSize: '13px', color: '#999', cursor: 'pointer' }}>Forgot password?</p>
-              <button style={mainBtnStyle}>{loading ? 'Entering...' : 'Sign In'}</button>
-            </div>
-            <SocialSection />
-          </form>
-        </div>
+            
+            <p style={{ fontSize: '16px', color: '#666', lineHeight: '1.6', marginBottom: '40px', maxWidth: '450px' }}>
+              Chúng tôi đã gửi mã xác nhận đến địa chỉ <strong>{email}</strong>. 
+              Vui lòng kiểm tra hộp thư (và cả thư rác) để tiếp tục hành trình của bạn.
+            </p>
 
-        {/* --- OVERLAY TRƯỢT (PHẦN MÀU XANH) --- */}
-        <motion.div
-          style={{
-            position: 'absolute',
-            top: 0,
-            width: '50%',
-            height: '100%',
-            ...glassStyles.overlay,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-            padding: '0 40px'
-          }}
-          animate={{ 
-            left: isLogin ? '0%' : '50%',
-            // Tạo hiệu ứng "Liquid" bằng cách thay đổi borderRadius động
-            borderTopRightRadius: isLogin ? '150px' : '40px',
-            borderBottomRightRadius: isLogin ? '100px' : '40px',
-            borderTopLeftRadius: isLogin ? '40px' : '150px',
-            borderBottomLeftRadius: isLogin ? '40px' : '100px',
-          }}
-          transition={{ type: 'spring', stiffness: 70, damping: 15 }}
-        >
-          <AnimatePresence mode='wait'>
-            <motion.div
-              key={isLogin ? 'login-view' : 'reg-view'}
-              initial={{ opacity: 0, x: isLogin ? -30 : 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: isLogin ? 30 : -30 }}
-              transition={{ duration: 0.4 }}
-            >
-              <h2 style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '16px' }}>
-                {isLogin ? 'Hello, Friend!' : 'Welcome Back!'}
-              </h2>
-              <p style={{ fontSize: '15px', lineHeight: '1.6', marginBottom: '32px', opacity: 0.9 }}>
-                {isLogin 
-                  ? "Enter your personal details and start journey with us" 
-                  : "To keep connected with us please login with your personal info"}
-              </p>
-              <button
-                onClick={() => setIsLogin(!isLogin)}
-                style={ghostBtnStyle}
+            <div style={{ display: 'flex', gap: '16px', width: '100%', justifyContent: 'center' }}>
+              <button 
+                onClick={() => setIsWaitingVerification(false)}
+                style={{ ...ghostBtnStyle, color: '#0083b0', borderColor: '#0083b0', padding: '12px 30px' }}
               >
-                {isLogin ? 'Sign Up' : 'Sign In'}
+                Quay lại
               </button>
-            </motion.div>
-          </AnimatePresence>
-        </motion.div>
+              <button 
+                onClick={() => window.location.reload()} // Load lại trang để check trạng thái auth mới
+                style={{ ...mainBtnStyle, width: 'auto', padding: '12px 40px' }}
+              >
+                Đã xác nhận, đăng nhập ngay
+              </button>
+            </div>
+          </motion.div>
+        ) : (
+          /* --- GIAO DIỆN LOGIN/REGISTER CŨ CỦA BẠN --- */
+          <motion.div key="auth-forms" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', width: '100%', height: '100%' }}>
+            
+            {/* --- FORM ĐĂNG KÝ (Nằm bên trái) --- */}
+            <div style={{
+              ...glassStyles.sidePanel,
+              left: 0,
+              opacity: isLogin ? 0 : 1,
+              zIndex: isLogin ? 1 : 2,
+              pointerEvents: isLogin ? 'none' : 'all'
+            }}>
+              <form onSubmit={handleAuth} className="w-full">
+                <h1 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '24px', textAlign: 'center', color: '#333' }}>
+                  Create Account
+                </h1>
+                <div className="space-y-4">
+                  <CustomInput icon={<User size={18}/>} placeholder="Name" value={name} onChange={setName} />
+                  <CustomInput icon={<Mail size={18}/>} placeholder="Email" value={email} onChange={setEmail} />
+                  <CustomInput icon={<Lock size={18}/>} placeholder="Password" type="password" value={password} onChange={setPassword} />
+                  <button style={mainBtnStyle}>{loading ? 'Creating...' : 'Sign Up'}</button>
+                </div>
+                <SocialSection />
+              </form>
+            </div>
 
-      </div>
+            {/* --- FORM ĐĂNG NHẬP (Nằm bên phải) --- */}
+            <div style={{
+              ...glassStyles.sidePanel,
+              left: '50%',
+              opacity: isLogin ? 1 : 0,
+              zIndex: isLogin ? 2 : 1,
+              pointerEvents: !isLogin ? 'none' : 'all'
+            }}>
+              <form onSubmit={handleAuth} className="w-full">
+                <h1 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '24px', textAlign: 'center', color: '#333' }}>
+                  Sign In
+                </h1>
+                <div className="space-y-4">
+                  <CustomInput icon={<Mail size={18}/>} placeholder="Email" value={email} onChange={setEmail} />
+                  <CustomInput icon={<Lock size={18}/>} placeholder="Password" type="password" value={password} onChange={setPassword} />
+                  <p style={{ textAlign: 'right', fontSize: '13px', color: '#999', cursor: 'pointer' }}>Forgot password?</p>
+                  <button style={mainBtnStyle}>{loading ? 'Entering...' : 'Sign In'}</button>
+                </div>
+                <SocialSection />
+              </form>
+            </div>
+
+            {/* --- OVERLAY TRƯỢT (PHẦN MÀU XANH) --- */}
+            <motion.div
+              style={{
+                position: 'absolute',
+                top: 0,
+                width: '50%',
+                height: '100%',
+                ...glassStyles.overlay,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                padding: '0 40px',
+                zIndex: 10
+              }}
+              animate={{ 
+                left: isLogin ? '0%' : '50%',
+                borderTopRightRadius: isLogin ? '150px' : '40px',
+                borderBottomRightRadius: isLogin ? '100px' : '40px',
+                borderTopLeftRadius: isLogin ? '40px' : '150px',
+                borderBottomLeftRadius: isLogin ? '40px' : '100px',
+              }}
+              transition={{ type: 'spring', stiffness: 70, damping: 15 }}
+            >
+              <AnimatePresence mode='wait'>
+                <motion.div
+                  key={isLogin ? 'login-view' : 'reg-view'}
+                  initial={{ opacity: 0, x: isLogin ? -30 : 30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: isLogin ? 30 : -30 }}
+                  transition={{ duration: 0.4 }}
+                >
+                  <h2 style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '16px' }}>
+                    {isLogin ? 'Hello, Friend!' : 'Welcome Back!'}
+                  </h2>
+                  <p style={{ fontSize: '15px', lineHeight: '1.6', marginBottom: '32px', opacity: 0.9 }}>
+                    {isLogin 
+                      ? "Enter your personal details and start journey with us" 
+                      : "To keep connected with us please login with your personal info"}
+                  </p>
+                  <button
+                    onClick={() => setIsLogin(!isLogin)}
+                    style={ghostBtnStyle}
+                  >
+                    {isLogin ? 'Sign Up' : 'Sign In'}
+                  </button>
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
-  );
+  </div>
+);
 }
 
 // --- COMPONENTS PHỤ DÙNG INLINE CSS ---
