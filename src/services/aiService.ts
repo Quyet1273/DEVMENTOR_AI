@@ -178,5 +178,34 @@ export const aiService = {
     `;
     return await callGroq(systemPrompt, "Hãy cho mình một lời khuyên để bắt đầu bài học này!", []);
   },
+// Thêm vào aiService.ts
+evaluateInterviewAnswer: async (question: string, answer: string, role: string) => {
+  const systemPrompt = `
+    Bạn là một Senior Technical Interviewer chuyên tuyển dụng vị trí ${role}.
+    Nhiệm vụ: Đánh giá câu trả lời phỏng vấn của ứng viên.
+    
+    Yêu cầu trả về định dạng JSON duy nhất như sau:
+    {
+      "rating": number (từ 1-5),
+      "feedback": "Nhận xét ngắn gọn về ưu/nhược điểm",
+      "modelAnswer": "Câu trả lời mẫu tối ưu nhất"
+    }
+    
+    Quy tắc chấm điểm:
+    - 1-2: Trả lời sai kiến thức hoặc quá sơ sài.
+    - 3-4: Trả lời đúng ý chính nhưng thiếu ví dụ hoặc chưa sâu.
+    - 5: Trả lời xuất sắc, đầy đủ kỹ thuật và thực tế.
+  `;
+
+  const userPrompt = `Câu hỏi: ${question}\nCâu trả lời của ứng viên: ${answer}`;
+  
+  // Gọi hàm callGroq đã viết ở các bước trước với tham số isJson = true
+  const response = await callGroq(systemPrompt, userPrompt, [], true);
+  try {
+    return JSON.parse(response);
+  } catch (e) {
+    return { rating: 3, feedback: "Câu trả lời ổn, cần chi tiết hơn.", modelAnswer: "Chưa có mẫu." };
+  }
+}
   
 };
